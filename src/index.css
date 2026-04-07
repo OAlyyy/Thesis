@@ -1,0 +1,156 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+
+/* ============================================================
+   CSS Design Tokens — Light Mode (default)
+   ============================================================ */
+:root {
+  /* Backgrounds */
+  --bg-base: #F8FAFC;
+  --bg-surface: #FFFFFF;
+  --bg-elevated: #F1F5F9;
+  --bg-hover: #F1F5F9;
+
+  /* Borders */
+  --border: #E2E8F0;
+  --border-strong: #CBD5E1;
+
+  /* Text */
+  --text-primary: #0F172A;
+  --text-secondary: #475569;
+  --text-muted: #94A3B8;
+  --text-inverse: #FFFFFF;
+
+  /* Primary (Indigo) */
+  --primary: #4F46E5;
+  --primary-hover: #4338CA;
+  --primary-light: #EEF2FF;
+  --primary-text: #4338CA;
+  --primary-border: #C7D2FE;
+
+  /* Danger */
+  --danger: #DC2626;
+  --danger-hover: #B91C1C;
+  --danger-light: #FEF2F2;
+  --danger-border: #FECACA;
+  --danger-text: #DC2626;
+
+  /* Success */
+  --success: #16A34A;
+  --success-light: #DCFCE7;
+  --success-text: #15803D;
+
+  /* Warning */
+  --warning-light: #FFF7ED;
+  --warning-border: #FED7AA;
+  --warning-text: #C2410C;
+
+  /* Info / Stats */
+  --info-light: #F0F9FF;
+  --info-border: #BAE6FD;
+  --info-text: #0369A1;
+
+  /* Shadows */
+  --shadow-sm: 0 1px 2px rgba(0,0,0,0.05);
+  --shadow-md: 0 1px 3px rgba(0,0,0,0.07), 0 4px 16px rgba(0,0,0,0.06);
+  --shadow-lg: 0 4px 6px rgba(0,0,0,0.05), 0 10px 30px rgba(0,0,0,0.08);
+}
+
+/* ============================================================
+   Dark Mode Overrides
+   ============================================================ */
+[data-theme="dark"] {
+  --bg-base: #0F172A;
+  --bg-surface: #1E293B;
+  --bg-elevated: #334155;
+  --bg-hover: #334155;
+
+  --border: #334155;
+  --border-strong: #475569;
+
+  --text-primary: #F1F5F9;
+  --text-secondary: #CBD5E1;
+  --text-muted: #64748B;
+  --text-inverse: #0F172A;
+
+  --primary: #818CF8;
+  --primary-hover: #A5B4FC;
+  --primary-light: #1E1B4B;
+  --primary-text: #A5B4FC;
+  --primary-border: #3730A3;
+
+  --danger: #F87171;
+  --danger-hover: #FCA5A5;
+  --danger-light: #450A0A;
+  --danger-border: #7F1D1D;
+  --danger-text: #F87171;
+
+  --success: #4ADE80;
+  --success-light: #052E16;
+  --success-text: #4ADE80;
+
+  --warning-light: #431407;
+  --warning-border: #7C2D12;
+  --warning-text: #FB923C;
+
+  --info-light: #0C1A2E;
+  --info-border: #1E3A5F;
+  --info-text: #7DD3FC;
+
+  --shadow-sm: 0 1px 2px rgba(0,0,0,0.3);
+  --shadow-md: 0 1px 3px rgba(0,0,0,0.4), 0 4px 16px rgba(0,0,0,0.3);
+  --shadow-lg: 0 4px 6px rgba(0,0,0,0.3), 0 10px 30px rgba(0,0,0,0.4);
+}
+
+/* ============================================================
+   Base Reset & Typography
+   ============================================================ */
+*, *::before, *::after {
+  box-sizing: border-box;
+}
+
+:root {
+  font-family: 'Inter', system-ui, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+  font-size: 16px;
+  line-height: 1.6;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+body {
+  margin: 0;
+  padding: 0;
+  min-height: 100vh;
+  background-color: var(--bg-base);
+  color: var(--text-primary);
+  transition: background-color 0.2s ease, color 0.2s ease;
+}
+
+#root {
+  min-height: 100vh;
+  width: 100%;
+}
+
+h1, h2, h3, h4, h5, h6 {
+  margin: 0;
+  line-height: 1.25;
+  color: var(--text-primary);
+}
+
+p { margin: 0; }
+
+button {
+  cursor: pointer;
+  font-family: inherit;
+  border: none;
+  transition: background-color 0.15s ease, color 0.15s ease, border-color 0.15s ease, opacity 0.15s ease;
+}
+
+input, textarea, select {
+  font-family: inherit;
+  font-size: 1rem;
+}
+
+a { color: var(--primary-text); text-decoration: none; }
+a:hover { text-decoration: underline; }
