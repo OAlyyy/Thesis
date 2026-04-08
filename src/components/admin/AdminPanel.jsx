@@ -1,8 +1,9 @@
 import { useState, useEffect } from 'react'
-import { getAllSessions, deleteSession, clearAllSessions, getAIEnabled, setAIEnabled, getStudyOpen, setStudyOpen } from '../utils/storage'
-import { generateCSV, downloadCSV } from '../utils/csvExport'
-import { contracts } from '../data/contracts'
-import ResultsReview from './ResultsReview'
+import { getAllSessions, deleteSession, clearAllSessions, getAIEnabled, setAIEnabled, getStudyOpen, setStudyOpen } from '../../services/storage'
+import { generateCSV, downloadCSV } from '../../utils/csvExport'
+import { contracts } from '../../data/contracts'
+import ResultsReview from '../study/ResultsReview'
+import AdminAnalytics from './AdminAnalytics'
 
 function exportAll(sessions) {
   if (sessions.length === 0) return
@@ -99,6 +100,7 @@ function AdminPanel() {
   const [reviewSession, setReviewSession] = useState(null)
   const [aiEnabled, setAIEnabledState] = useState(() => getAIEnabled())
   const [studyOpen, setStudyOpenState] = useState(() => getStudyOpen())
+  const [tab, setTab] = useState('participants')
 
   useEffect(() => { getAllSessions().then(setSessions) }, [])
 
@@ -284,6 +286,35 @@ function AdminPanel() {
         </div>
       </div>
 
+      {/* Tab switcher */}
+      <div style={{ display: 'flex', gap: '0.25rem', marginBottom: '1rem', borderBottom: '1px solid var(--border)', paddingBottom: '0' }}>
+        {['participants', 'analytics'].map(t => (
+          <button
+            key={t}
+            onClick={() => setTab(t)}
+            style={{
+              padding: '0.5rem 1rem',
+              fontSize: '0.85rem',
+              fontWeight: 600,
+              border: 'none',
+              background: 'transparent',
+              cursor: 'pointer',
+              color: tab === t ? 'var(--primary-text)' : 'var(--text-muted)',
+              borderBottom: tab === t ? '2px solid var(--primary)' : '2px solid transparent',
+              marginBottom: '-1px',
+              transition: 'color 0.15s',
+              textTransform: 'capitalize',
+            }}
+          >
+            {t === 'participants' ? `Participants (${sessions.length})` : 'Analytics'}
+          </button>
+        ))}
+      </div>
+
+      {tab === 'analytics' && <AdminAnalytics sessions={sessions} />}
+
+      {tab === 'participants' && <>
+
       {/* Stats bar */}
       <div className="admin-stats">
         <strong>Total participants: {sessions.length}</strong>
@@ -362,6 +393,8 @@ function AdminPanel() {
           </tbody>
         </table>
       )}
+
+      </>}
 
       {/* Confirm Clear All Modal */}
       {confirmClear && (

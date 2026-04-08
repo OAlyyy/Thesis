@@ -1,6 +1,6 @@
 import { useState } from 'react';
-import { generateCSV, downloadCSV } from '../utils/csvExport';
-import { contracts } from '../data/contracts';
+import { generateCSV, downloadCSV } from '../../utils/csvExport';
+import { contracts } from '../../data/contracts';
 import ResultsReview from './ResultsReview';
 
 function formatTime(seconds) {

@@ -1,9 +1,9 @@
 import { useState, useEffect, useRef } from 'react';
 import SyntaxHighlighter from 'react-syntax-highlighter';
 import { vs2015 } from 'react-syntax-highlighter/dist/esm/styles/hljs';
-import Timer from './Timer';
-import QuestionRenderer from './QuestionRenderer';
-import { generateContractVariation } from '../utils/aiVariation';
+import Timer from '../ui/Timer';
+import QuestionRenderer from '../ui/QuestionRenderer';
+import { generateContractVariation } from '../../services/aiVariation';
 
 function ContractGroup({ contract, contractIndex, onComplete }) {
   const [variedCode, setVariedCode] = useState(null);

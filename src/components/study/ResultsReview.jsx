@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
-import { contracts } from '../data/contracts';
-import { gradeOpenTextAnswers } from '../utils/aiGrading';
+import { contracts } from '../../data/contracts';
+import { gradeOpenTextAnswers } from '../../services/aiGrading';
 
 const SCORE_LABEL = { correct: 'Correct', partial: 'Partial', incorrect: 'Incorrect' };
 const SCORE_CLASS = { correct: 'grade-correct', partial: 'grade-partial', incorrect: 'grade-incorrect' };
