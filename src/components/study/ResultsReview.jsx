@@ -102,12 +102,13 @@ export default function ResultsReview({ contractOrder, contractResults, onClose 
           if (!contract || !result) return null;
 
           const answers = result.answers || {};
+          const questions = result.variedQuestions || contract.questions;
 
           return (
             <section key={contractId} className="review-contract-section">
               <h3 className="review-contract-title">{contract.label}</h3>
 
-              {contract.questions.map((q) => {
+              {questions.map((q) => {
                 if (q.type === 'scale') {
                   return <ScaleResult key={q.id} question={q} answer={answers[q.id]} />;
                 }

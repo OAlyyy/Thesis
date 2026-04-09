@@ -2,8 +2,24 @@ import { getAIEnabled } from './storage';
 
 const GROQ_API_URL = 'https://api.groq.com/openai/v1/chat/completions';
 
+// Plain replaceAll (no word boundaries) — used on code so _value, _implementation etc. are also renamed
+function applyCodeMapping(code, mapping) {
+  return Object.entries(mapping).reduce(
+    (s, [oldName, newName]) => s.replaceAll(oldName, newName),
+    code
+  );
+}
+
 const PROMPT = (code) =>
-  `You are a Solidity code transformer. Return the following smart contract with all variable names, function names, and contract names replaced with different but meaningful names. Keep the logic, structure, comments, and architecture completely identical. Return only the modified Solidity code, no explanation, no markdown backticks.\n\n${code}`;
+  `You are a Solidity code transformer. Transform the following smart contract by replacing all variable names, function names, and contract names with different but meaningful names. Keep the logic, structure, comments, and architecture completely identical.
+
+Return a JSON object with exactly two fields:
+- "code": the complete modified Solidity code as a string
+- "renames": an object mapping every original identifier to its new name (e.g. {"SimpleStorage": "DataVault", "setValue": "storeData", "value": "amount"})
+
+Return only the JSON object, no explanation, no markdown backticks.
+
+${code}`;
 
 async function callGroq(code, model) {
   const apiKey = import.meta.env.VITE_GROQ_KEY;
@@ -21,26 +37,38 @@ async function callGroq(code, model) {
   });
   if (!response.ok) throw new Error(`Groq ${response.status}`);
   const data = await response.json();
-  return data.choices[0].message.content.trim();
+  const raw = data.choices[0].message.content.trim();
+  const parsed = JSON.parse(raw);
+  return { variedCode: parsed.code, nameMapping: parsed.renames || {} };
 }
 
-export async function generateContractVariation(originalCode) {
+const NO_VARIATION = { variedCode: null, nameMapping: {} };
+
+function staticVariant(contract) {
+  const variants = contract.variants;
+  if (!variants || variants.length === 0) return NO_VARIATION;
+  const nameMapping = variants[Math.floor(Math.random() * variants.length)];
+  return { variedCode: applyCodeMapping(contract.code, nameMapping), nameMapping };
+}
+
+export async function generateContractVariation(contract) {
   const apiKey = import.meta.env.VITE_GROQ_KEY;
-  if (!apiKey || apiKey === 'your_groq_api_key_here') return originalCode;
-  if (!getAIEnabled()) return originalCode;
+  const aiEnabled = apiKey && apiKey !== 'your_groq_api_key_here' && getAIEnabled();
 
-  // Primary: LLaMA 3.3 70B
-  try {
-    return await callGroq(originalCode, 'llama-3.3-70b-versatile');
-  } catch (primaryError) {
-    console.warn('Primary model failed, trying LLaMA 4 Scout:', primaryError);
+  if (aiEnabled) {
+    // Primary: LLaMA 3.3 70B
+    try {
+      return await callGroq(contract.code, 'llama-3.3-70b-versatile');
+    } catch (primaryError) {
+      console.warn('Primary model failed, trying LLaMA 4 Scout:', primaryError);
+    }
+    // Backup: LLaMA 4 Scout
+    try {
+      return await callGroq(contract.code, 'meta-llama/llama-4-scout-17b-16e-instruct');
+    } catch (backupError) {
+      console.warn('Both AI models failed, falling back to static variant:', backupError);
+    }
   }
 
-  // Backup: LLaMA 4 Scout
-  try {
-    return await callGroq(originalCode, 'meta-llama/llama-4-scout-17b-16e-instruct');
-  } catch (backupError) {
-    console.error('Both models failed, using original:', backupError);
-    return originalCode;
-  }
+  return staticVariant(contract);
 }

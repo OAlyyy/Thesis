@@ -200,10 +200,10 @@ function AdminPanel() {
                     </pre>
                   </details>
                 )}
-                {result && result.answers && contract && contract.questions && (
+                {result && result.answers && contract && (
                   <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.85rem' }}>
                     <tbody>
-                      {contract.questions.map((q) => (
+                      {(result.variedQuestions || contract.questions).map((q) => (
                         <tr key={q.id}>
                           <td style={{ padding: '0.35rem 0.5rem', fontWeight: 600, color: 'var(--text-secondary)', width: '55%', borderBottom: '1px solid var(--border)', verticalAlign: 'top' }}>
                             {q.prompt}
@@ -213,16 +213,6 @@ function AdminPanel() {
                           </td>
                         </tr>
                       ))}
-                      {result.answers['difficulty'] !== undefined && (
-                        <tr>
-                          <td style={{ padding: '0.35rem 0.5rem', fontWeight: 600, color: 'var(--text-secondary)', borderBottom: '1px solid var(--border)', verticalAlign: 'top' }}>
-                            Difficulty rating
-                          </td>
-                          <td style={{ padding: '0.35rem 0.5rem', color: 'var(--text-primary)', borderBottom: '1px solid var(--border)', verticalAlign: 'top' }}>
-                            {String(result.answers['difficulty'])}
-                          </td>
-                        </tr>
-                      )}
                     </tbody>
                   </table>
                 )}

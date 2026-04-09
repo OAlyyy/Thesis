@@ -5,8 +5,39 @@ import Timer from '../ui/Timer';
 import QuestionRenderer from '../ui/QuestionRenderer';
 import { generateContractVariation } from '../../services/aiVariation';
 
+// Word-boundary replace — avoids mangling English words like "voted", "voting" when renaming "vote"
+const esc = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+const wbReplace = (str, mapping) =>
+  Object.entries(mapping).reduce(
+    (s, [oldName, newName]) => s.replace(new RegExp(`\\b${esc(oldName)}\\b`, 'g'), newName),
+    str
+  );
+
+function applyNameMapping(questions, mapping) {
+  if (!mapping || Object.keys(mapping).length === 0) return questions;
+  const replace = (str) => (str ? wbReplace(str, mapping) : str);
+  return questions.map((q) => ({
+    ...q,
+    prompt: replace(q.prompt),
+    ...(q.options && { options: q.options.map(replace) }),
+    ...(q.correctAnswer && { correctAnswer: replace(q.correctAnswer) }),
+    ...(q.explanation && { explanation: replace(q.explanation) }),
+  }));
+}
+
+function reverseMapAnswers(answers, mapping) {
+  if (!mapping || Object.keys(mapping).length === 0) return answers;
+  const rev = Object.fromEntries(Object.entries(mapping).map(([k, v]) => [v, k]));
+  const replace = (str) => (str ? wbReplace(str, rev) : str);
+  return Object.fromEntries(
+    Object.entries(answers).map(([qId, val]) => [qId, typeof val === 'string' ? replace(val) : val])
+  );
+}
+
 function ContractGroup({ contract, contractIndex, onComplete }) {
   const [variedCode, setVariedCode] = useState(null);
+  const [variedQuestions, setVariedQuestions] = useState(contract.questions);
+  const [nameMapping, setNameMapping] = useState({});
   const [loading, setLoading] = useState(true);
   const [answers, setAnswers] = useState({});
   const [submitted, setSubmitted] = useState(false);
@@ -16,9 +47,11 @@ function ContractGroup({ contract, contractIndex, onComplete }) {
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
-    generateContractVariation(contract.code).then((code) => {
+    generateContractVariation(contract).then(({ variedCode, nameMapping: mapping }) => {
       if (!cancelled) {
-        setVariedCode(code);
+        setVariedCode(variedCode);
+        setVariedQuestions(applyNameMapping(contract.questions, mapping));
+        setNameMapping(mapping);
         setLoading(false);
       }
     });
@@ -31,7 +64,7 @@ function ContractGroup({ contract, contractIndex, onComplete }) {
     setAnswers((prev) => ({ ...prev, [id]: value }));
   };
 
-  const allAnswered = contract.questions.every((q) => {
+  const allAnswered = variedQuestions.every((q) => {
     const val = answers[q.id];
     if (q.type === 'text') return val && val.trim().length > 0;
     return val !== undefined && val !== '';
@@ -44,7 +77,9 @@ function ContractGroup({ contract, contractIndex, onComplete }) {
       timeSpent: elapsedRef.current,
       timerExpired: timerExpiredRef.current,
       answers: { ...answers },
+      canonicalAnswers: reverseMapAnswers(answers, nameMapping),
       variedCode: variedCode || contract.code,
+      variedQuestions,
     });
   };
 
@@ -110,7 +145,7 @@ function ContractGroup({ contract, contractIndex, onComplete }) {
             Please answer all questions based on the contract shown above.
           </p>
           <QuestionRenderer
-            questions={contract.questions}
+            questions={variedQuestions}
             answers={answers}
             onChange={handleAnswerChange}
           />

@@ -3,6 +3,12 @@ export const contracts = {
     id: 'A',
     label: 'Contract A — Simple, No Proxy',
     timerSeconds: 400,
+    // Ordering rule: compound names (setValue, getValue) before their root (value)
+    variants: [
+      { SimpleStorage: 'DataVault',    setValue: 'storeAmount',  getValue: 'fetchAmount',  value: 'amount'  },
+      { SimpleStorage: 'CounterStore', setValue: 'setCount',     getValue: 'getCount',     value: 'count'   },
+      { SimpleStorage: 'RecordKeeper', setValue: 'writeRecord',  getValue: 'readRecord',   value: 'record'  },
+    ],
     code: `pragma solidity ^0.8.0;
 
 contract SimpleStorage {
@@ -80,6 +86,12 @@ contract SimpleStorage {
     id: 'B',
     label: 'Contract B — Simple, With Proxy',
     timerSeconds: 400,
+    // Ordering: SimpleStorageV2 before any shorter root, setValue/getValue before value
+    variants: [
+      { SimpleStorageV2: 'DataVaultV2',    Proxy: 'Forwarder',  setValue: 'storeAmount', getValue: 'fetchAmount', implementation: 'target',   value: 'amount' },
+      { SimpleStorageV2: 'CounterStoreV2', Proxy: 'Dispatcher', setValue: 'setCount',    getValue: 'getCount',    implementation: 'delegate', value: 'count'  },
+      { SimpleStorageV2: 'RecordKeeperV2', Proxy: 'Gateway',    setValue: 'writeRecord', getValue: 'readRecord',  implementation: 'backend',  value: 'record' },
+    ],
     code: `pragma solidity ^0.8.0;
 
 contract SimpleStorageV2 {
@@ -182,6 +194,12 @@ contract Proxy {
     id: 'C',
     label: 'Contract C — Complex, No Proxy',
     timerSeconds: 600,
+    // Ordering: closeVoting before vote; voteCounts before vote (avoids replaceAll hitting "vote" inside "voteCounts"); vote before hasVoted
+    variants: [
+      { VotingSystem: 'ElectionManager', closeVoting: 'endElection',  candidateId: 'candidateIndex', voteCounts: 'tally',       votingOpen: 'electionActive', vote: 'castVote',   hasVoted: 'alreadyVoted', owner: 'admin'     },
+      { VotingSystem: 'PollContract',    closeVoting: 'closePoll',    candidateId: 'optionId',       voteCounts: 'scores',      votingOpen: 'pollActive',     vote: 'submitVote', hasVoted: 'participated',  owner: 'moderator' },
+      { VotingSystem: 'BallotSystem',    closeVoting: 'sealBallot',   candidateId: 'choiceId',       voteCounts: 'ballotCount', votingOpen: 'ballotOpen',     vote: 'recordVote', hasVoted: 'voteRecorded',  owner: 'organizer' },
+    ],
     code: `pragma solidity ^0.8.0;
 
 contract VotingSystem {
@@ -268,6 +286,12 @@ contract VotingSystem {
     id: 'D',
     label: 'Contract D — Complex, With Proxy',
     timerSeconds: 600,
+    // Ordering: VotingSystemV2/VotingProxy first; closeVoting/upgradeTo before vote; voteCounts before vote; vote before hasVoted
+    variants: [
+      { VotingSystemV2: 'ElectionManagerV2', VotingProxy: 'ElectionProxy',  closeVoting: 'endElection', upgradeTo: 'upgradeLogic', candidateId: 'candidateIndex', voteCounts: 'tally',       votingOpen: 'electionActive', vote: 'castVote',   hasVoted: 'alreadyVoted', initialize: 'setup',    implementation: 'logicContract', owner: 'admin'     },
+      { VotingSystemV2: 'PollContractV2',    VotingProxy: 'PollForwarder',   closeVoting: 'closePoll',  upgradeTo: 'setLogic',     candidateId: 'optionId',       voteCounts: 'scores',      votingOpen: 'pollActive',     vote: 'submitVote', hasVoted: 'participated',  initialize: 'activate', implementation: 'logicAddress',  owner: 'moderator' },
+      { VotingSystemV2: 'BallotSystemV2',    VotingProxy: 'BallotProxy',     closeVoting: 'sealBallot', upgradeTo: 'pointTo',      candidateId: 'choiceId',       voteCounts: 'ballotCount', votingOpen: 'ballotOpen',     vote: 'recordVote', hasVoted: 'voteRecorded',  initialize: 'init',     implementation: 'logicTarget',   owner: 'organizer' },
+    ],
     code: `pragma solidity ^0.8.0;
 
 contract VotingSystemV2 {

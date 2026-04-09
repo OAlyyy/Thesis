@@ -142,24 +142,13 @@ function AdminAnalytics({ sessions }) {
   function getMcDist(contractId, questionId) {
     const dist = {}
     sessions.forEach(s => {
-      const ans = s.contractResults?.[contractId]?.answers?.[questionId]
+      const result = s.contractResults?.[contractId]
+      const ans = result?.canonicalAnswers?.[questionId] ?? result?.answers?.[questionId]
       if (ans) dist[ans] = (dist[ans] || 0) + 1
     })
     return dist
   }
 
-  // Key MC questions per contract
-  const mcQuestions = [
-    { contractId: 'A', qId: 'q2', label: 'A — Which contract executes logic?' },
-    { contractId: 'A', qId: 'q3', label: 'A — Where is "value" stored?' },
-    { contractId: 'B', qId: 'q2', label: 'B — Which contract executes logic?' },
-    { contractId: 'B', qId: 'q3', label: 'B — Where is "value" stored?' },
-    { contractId: 'B', qId: 'q6', label: 'B — Where is 42 actually stored?' },
-    { contractId: 'C', qId: 'q2', label: 'C — Who can call closeVoting()?' },
-    { contractId: 'C', qId: 'q3', label: 'C — What if vote() called twice?' },
-    { contractId: 'D', qId: 'q2', label: 'D — Which contract executes vote()?' },
-    { contractId: 'D', qId: 'q3', label: 'D — Where is hasVoted stored?' },
-  ]
 
   // ── Presentation order analysis ───────────────────────────────
   const orderCounts = {}
@@ -316,33 +305,49 @@ function AdminAnalytics({ sessions }) {
 
       {/* ── MC question answer distributions ── */}
       <Section title="Multiple Choice Answer Distributions (green = correct)">
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '1.5rem' }}>
-          {mcQuestions.map(({ contractId, qId, label }) => {
-            const q = contracts[contractId]?.questions?.find(q => q.id === qId)
-            if (!q || !q.options) return null
-            const dist = getMcDist(contractId, qId)
+        {CONTRACT_IDS.map((contractId, ci) => {
+          const radioQs = contracts[contractId]?.questions?.filter(q => q.type === 'radio') || []
+          const qsWithData = radioQs.map(q => {
+            const dist = getMcDist(contractId, q.id)
             const total = Object.values(dist).reduce((a, b) => a + b, 0)
-            if (total === 0) return null
-            const maxCount = Math.max(...Object.values(dist), 1)
-            return (
-              <div key={`${contractId}_${qId}`}>
-                <div style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--text-primary)', marginBottom: '0.4rem' }}>
-                  {label}
-                </div>
-                {q.options.map(opt => (
-                  <HBar
-                    key={opt}
-                    label={opt}
-                    value={dist[opt] || 0}
-                    max={maxCount}
-                    color={opt === q.correctAnswer ? 'var(--success)' : '#94A3B8'}
-                    total={total}
-                  />
-                ))}
+            return { q, dist, total }
+          }).filter(({ total }) => total > 0)
+          if (qsWithData.length === 0) return null
+          return (
+            <div key={contractId} style={{ marginBottom: '1.75rem' }}>
+              <div style={{
+                fontSize: '0.75rem', fontWeight: 700, color: CONTRACT_COLORS[ci],
+                textTransform: 'uppercase', letterSpacing: '0.05em',
+                marginBottom: '0.875rem', paddingBottom: '0.35rem',
+                borderBottom: `2px solid ${CONTRACT_COLORS[ci]}22`,
+              }}>
+                Contract {contractId} — {contracts[contractId]?.label?.split('—')[1]?.trim()}
               </div>
-            )
-          })}
-        </div>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '1.25rem' }}>
+                {qsWithData.map(({ q, dist, total }) => {
+                  const maxCount = Math.max(...Object.values(dist), 1)
+                  return (
+                    <div key={q.id}>
+                      <div style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--text-primary)', marginBottom: '0.4rem' }}>
+                        {q.prompt}
+                      </div>
+                      {q.options.map(opt => (
+                        <HBar
+                          key={opt}
+                          label={opt}
+                          value={dist[opt] || 0}
+                          max={maxCount}
+                          color={opt === q.correctAnswer ? 'var(--success)' : '#94A3B8'}
+                          total={total}
+                        />
+                      ))}
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
+          )
+        })}
       </Section>
     </div>
   )
