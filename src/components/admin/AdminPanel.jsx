@@ -1,9 +1,11 @@
-import { useState, useEffect } from 'react'
-import { getAllSessions, deleteSession, clearAllSessions, getAIEnabled, setAIEnabled, getStudyOpen, setStudyOpen } from '../../services/storage'
+import { useState, useEffect, useRef } from 'react'
+import { FiRefreshCw, FiChevronDown, FiLogOut, FiArrowLeft } from 'react-icons/fi'
+import { getAllSessions, deleteSession, clearAllSessions, updateSession, getAIEnabled, setAIEnabled, getStudyOpen, setStudyOpen } from '../../services/storage'
 import { generateCSV, downloadCSV } from '../../utils/csvExport'
 import { contracts } from '../../data/contracts'
 import ResultsReview from '../study/ResultsReview'
 import AdminAnalytics from './AdminAnalytics'
+import { supabase } from '../../services/supabase'
 
 function exportAll(sessions) {
   if (sessions.length === 0) return
@@ -92,15 +94,23 @@ function TogglePill({ label, enabled, onChange }) {
   )
 }
 
-function AdminPanel() {
+function AdminPanel({ onLogout }) {
   const [sessions, setSessions] = useState([])
   const [selectedSession, setSelectedSession] = useState(null)
   const [confirmClear, setConfirmClear] = useState(false)
   const [deleteConfirm, setDeleteConfirm] = useState(null)
   const [reviewSession, setReviewSession] = useState(null)
+  const [editSession, setEditSession] = useState(null)
+  const [editForm, setEditForm] = useState({})
+  const [editSaving, setEditSaving] = useState(false)
+  const [editSaved, setEditSaved] = useState(false)
   const [aiEnabled, setAIEnabledState] = useState(() => getAIEnabled())
   const [studyOpen, setStudyOpenState] = useState(() => getStudyOpen())
   const [tab, setTab] = useState('participants')
+  const [exportOpen, setExportOpen] = useState(false)
+
+  const [confirmLogout, setConfirmLogout] = useState(false)
+  const exportRef = useRef(null)
 
   useEffect(() => { getAllSessions().then(setSessions) }, [])
 
@@ -130,6 +140,39 @@ function AdminPanel() {
     refresh()
     setSelectedSession(null)
     setConfirmClear(false)
+  }
+
+  function openEdit(session) {
+    setEditSession(session)
+    const bg = session.backgroundAnswers || {}
+    setEditForm({
+      ...bg,
+      solidity_experience: String(bg.solidity_experience ?? ''),
+      proxy_experience: String(bg.proxy_experience ?? ''),
+      peer_experience: String(bg.peer_experience ?? ''),
+      blockchain_familiarity: String(bg.blockchain_familiarity ?? ''),
+    })
+    setEditSaved(false)
+  }
+
+  async function handleSaveEdit() {
+    const updated = {
+      ...editSession,
+      backgroundAnswers: {
+        ...editSession.backgroundAnswers,
+        ...editForm,
+        years_programming: Number(editForm.years_programming),
+        years_professional: Number(editForm.years_professional),
+      },
+    }
+    setEditSaving(true)
+    await updateSession(editSession.participantId, updated)
+    setEditSaving(false)
+    setEditSaved(true)
+    if (selectedSession && selectedSession.participantId === editSession.participantId) {
+      setSelectedSession(updated)
+    }
+    setTimeout(() => { setEditSession(null); setEditSaved(false); refresh() }, 1000)
   }
 
   // --- Detail View ---
@@ -247,20 +290,82 @@ function AdminPanel() {
       {/* Header */}
       <div className="admin-header">
         <h1 style={{ fontSize: '1.1rem', fontWeight: 700, color: 'var(--text-primary)', margin: 0 }}>
-          ProxyScope &mdash; Admin Panel
+          Admin Panel
         </h1>
-        <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center', flexWrap: 'wrap' }}>
-          <a
-            href="#"
+        <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+          {/* Back to Study icon */}
+          <button
+            className="btn-secondary"
             onClick={() => { window.location.hash = '' }}
-            style={{ fontSize: '0.875rem', color: 'var(--primary-text)', textDecoration: 'none' }}
+            title="Back to Study"
+            style={{ padding: '0.4rem 0.6rem', display: 'flex', alignItems: 'center' }}
           >
-            &#8592; Back to Study
-          </a>
-          <button className="btn-secondary" onClick={refresh}>&#8635; Refresh</button>
-          <button className="btn-secondary" onClick={() => exportAll(sessions)} disabled={sessions.length === 0}>Export CSV</button>
-          <button className="btn-secondary" onClick={() => exportJSON(sessions)} disabled={sessions.length === 0}>Backup JSON</button>
-          <button className="btn-danger" onClick={() => setConfirmClear(true)} disabled={sessions.length === 0}>Clear All</button>
+            <FiArrowLeft size={14} />
+          </button>
+
+          {/* Refresh icon */}
+          <button
+            className="btn-secondary"
+            onClick={refresh}
+            title="Refresh"
+            style={{ padding: '0.4rem 0.6rem', display: 'flex', alignItems: 'center' }}
+          >
+            <FiRefreshCw size={14} />
+          </button>
+
+          {/* Export dropdown */}
+          <div ref={exportRef} style={{ position: 'relative' }}>
+            <button
+              className="btn-secondary"
+              onClick={() => setExportOpen(o => !o)}
+              disabled={sessions.length === 0}
+              style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}
+            >
+              Export <FiChevronDown size={13} />
+            </button>
+            {exportOpen && (
+              <div style={{
+                position: 'absolute', right: 0, top: 'calc(100% + 4px)',
+                background: 'var(--bg-surface)', border: '1px solid var(--border)',
+                borderRadius: '0.5rem', boxShadow: 'var(--shadow-md)',
+                minWidth: 140, zIndex: 50, overflow: 'hidden',
+              }}>
+                {[
+                  { label: 'Export CSV', action: () => { exportAll(sessions); setExportOpen(false) } },
+                  { label: 'Backup JSON', action: () => { exportJSON(sessions); setExportOpen(false) } },
+                ].map(item => (
+                  <button
+                    key={item.label}
+                    onClick={item.action}
+                    style={{
+                      display: 'block', width: '100%', textAlign: 'left',
+                      padding: '0.55rem 0.875rem', background: 'none', border: 'none',
+                      fontSize: '0.8375rem', color: 'var(--text-secondary)', cursor: 'pointer',
+                    }}
+                    onMouseEnter={e => e.currentTarget.style.background = 'var(--bg-elevated)'}
+                    onMouseLeave={e => e.currentTarget.style.background = 'none'}
+                  >
+                    {item.label}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* Logout icon */}
+          <button
+            onClick={() => setConfirmLogout(true)}
+            title="Logout"
+            style={{
+              padding: '0.4rem 0.6rem', display: 'flex', alignItems: 'center',
+              background: 'none', border: '1px solid var(--border)', borderRadius: '0.5rem',
+              color: 'var(--text-muted)', cursor: 'pointer', transition: 'color 0.15s',
+            }}
+            onMouseEnter={e => e.currentTarget.style.color = 'var(--danger)'}
+            onMouseLeave={e => e.currentTarget.style.color = 'var(--text-muted)'}
+          >
+            <FiLogOut size={14} />
+          </button>
         </div>
       </div>
 
@@ -369,6 +474,9 @@ function AdminPanel() {
                       <button className="btn-secondary" onClick={() => setReviewSession(s)}>
                         Review
                       </button>
+                      <button className="btn-secondary" onClick={() => openEdit(s)}>
+                        Edit
+                      </button>
                       <button
                         className="btn-danger"
                         onClick={() => setDeleteConfirm(s.participantId)}
@@ -385,6 +493,24 @@ function AdminPanel() {
       )}
 
       </>}
+
+      {/* Confirm Logout */}
+      {confirmLogout && (
+        <div className="modal-overlay">
+          <div className="modal-box">
+            <p style={{ fontWeight: 600, color: 'var(--text-primary)', marginBottom: '0.75rem' }}>
+              Log out?
+            </p>
+            <p style={{ fontSize: '0.875rem', color: 'var(--text-muted)', marginBottom: '1.5rem' }}>
+              You will need to sign in again to access the admin panel.
+            </p>
+            <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'flex-end' }}>
+              <button className="btn-secondary" onClick={() => setConfirmLogout(false)}>Cancel</button>
+              <button className="btn-danger" onClick={async () => { await supabase.auth.signOut(); onLogout(); window.location.hash = '' }}>Logout</button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Confirm Clear All Modal */}
       {confirmClear && (
@@ -434,6 +560,55 @@ function AdminPanel() {
               </button>
               <button className="btn-danger" onClick={() => handleDelete(deleteConfirm)}>
                 Delete
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Edit Session Modal */}
+      {editSession && (
+        <div className="modal-overlay" onClick={(e) => { if (e.target === e.currentTarget) setEditSession(null) }}>
+          <div className="modal-box" style={{ width: '90%', maxWidth: '520px', maxHeight: '85vh', overflowY: 'auto' }}>
+            <p style={{ fontWeight: 600, color: 'var(--text-primary)', marginBottom: '0.25rem' }}>Edit Background Answers</p>
+            <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginBottom: '1.25rem', fontFamily: 'monospace' }}>
+              {editSession.participantId}
+            </p>
+            {[
+              { key: 'years_programming', label: 'Years programming', type: 'number' },
+              { key: 'years_professional', label: 'Years professional', type: 'number' },
+              { key: 'occupation', label: 'Occupation', type: 'text' },
+              { key: 'solidity_experience', label: 'Solidity experience (1–5)', type: 'select', options: ['1','2','3','4','5'] },
+              { key: 'proxy_experience', label: 'Proxy pattern experience', type: 'select', options: ['Yes','No'] },
+              { key: 'peer_experience', label: 'Peer experience (1–5)', type: 'select', options: ['1','2','3','4','5'] },
+              { key: 'blockchain_familiarity', label: 'Blockchain familiarity (1–5)', type: 'select', options: ['1','2','3','4','5'] },
+            ].map(({ key, label, type, options }) => (
+              <div key={key} style={{ marginBottom: '0.875rem' }}>
+                <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '0.3rem' }}>
+                  {label}
+                </label>
+                {type === 'select' ? (
+                  <select
+                    value={String(editForm[key] ?? '')}
+                    onChange={(e) => setEditForm(f => ({ ...f, [key]: e.target.value }))}
+                    style={{ width: '100%', padding: '0.4rem 0.6rem', borderRadius: '0.375rem', border: '1px solid var(--border)', background: 'var(--bg-base)', color: 'var(--text-primary)', fontSize: '0.875rem' }}
+                  >
+                    {options.map(o => <option key={o} value={o}>{o}</option>)}
+                  </select>
+                ) : (
+                  <input
+                    type={type}
+                    value={editForm[key] ?? ''}
+                    onChange={(e) => setEditForm(f => ({ ...f, [key]: e.target.value }))}
+                    style={{ width: '100%', padding: '0.4rem 0.6rem', borderRadius: '0.375rem', border: '1px solid var(--border)', background: 'var(--bg-base)', color: 'var(--text-primary)', fontSize: '0.875rem', boxSizing: 'border-box' }}
+                  />
+                )}
+              </div>
+            ))}
+            <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'flex-end', marginTop: '1.25rem' }}>
+              <button className="btn-secondary" onClick={() => setEditSession(null)} disabled={editSaving}>Cancel</button>
+              <button className="btn-primary" onClick={handleSaveEdit} disabled={editSaving || editSaved}>
+                {editSaving ? 'Saving…' : editSaved ? '✓ Saved' : 'Save Changes'}
               </button>
             </div>
           </div>

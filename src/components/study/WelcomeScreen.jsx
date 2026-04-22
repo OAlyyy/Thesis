@@ -1,12 +1,23 @@
-function WelcomeScreen({ onStart, theme, onToggleTheme }) {
+import { FiSun, FiMoon, FiClock, FiLock, FiFileText } from 'react-icons/fi'
+
+function WelcomeScreen({ onStart, theme, onToggleTheme, showThemeToggle }) {
   return (
     <div className="screen-container">
-      <div className="top-bar">
-        <button className="top-bar-btn" onClick={onToggleTheme} title="Toggle dark/light mode">
-          {theme === 'dark' ? '☀ Light' : '☾ Dark'}
-        </button>
-        <a href="#admin" className="top-bar-btn">Admin</a>
-      </div>
+      <nav className="navbar">
+        <img
+          src="/University-of-Duisburg-Essen_logo-348x348.png"
+          alt="University of Duisburg-Essen"
+          className="navbar-logo"
+        />
+        <div className="navbar-actions">
+          {showThemeToggle && (
+            <button className="top-bar-btn" onClick={onToggleTheme} title="Toggle dark/light mode">
+              {theme === 'dark' ? <><FiSun /> Light</> : <><FiMoon /> Dark</>}
+            </button>
+          )}
+          <a href="#admin" className="top-bar-btn">Admin</a>
+        </div>
+      </nav>
 
       <div className="welcome-card">
 
@@ -29,21 +40,21 @@ function WelcomeScreen({ onStart, theme, onToggleTheme }) {
 
         <div className="study-facts">
           <div className="study-fact">
-            <span className="fact-icon">&#9200;</span>
+            <span className="fact-icon"><FiClock /></span>
             <div>
               <p className="fact-label">20 – 40 min</p>
               <p className="fact-desc">Estimated duration</p>
             </div>
           </div>
           <div className="study-fact">
-            <span className="fact-icon">&#128274;</span>
+            <span className="fact-icon"><FiLock /></span>
             <div>
               <p className="fact-label">Anonymous</p>
               <p className="fact-desc">No personal data stored</p>
             </div>
           </div>
           <div className="study-fact">
-            <span className="fact-icon">&#128203;</span>
+            <span className="fact-icon"><FiFileText /></span>
             <div>
               <p className="fact-label">4 Contracts</p>
               <p className="fact-desc">With comprehension questions</p>

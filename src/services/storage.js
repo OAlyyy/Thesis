@@ -49,23 +49,39 @@ export async function getAllSessions() {
     const { data, error } = await supabase
       .from('sessions')
       .select('*')
+      .is('deleted_at', null)
       .order('created_at', { ascending: false })
     if (!error && data) return data.map(fromRow)
     console.warn('Supabase fetch failed, falling back to localStorage:', error)
   }
-  return getLocalSessions()
+  return getLocalSessions().filter(s => !s.deleted)
 }
 
 export async function deleteSession(participantId) {
   if (supabase) {
     const { error } = await supabase
       .from('sessions')
-      .delete()
+      .update({ deleted_at: new Date().toISOString() })
       .eq('participant_id', participantId)
     if (!error) return
-    console.warn('Supabase delete failed, falling back to localStorage:', error)
+    console.warn('Supabase soft-delete failed, falling back to localStorage:', error)
   }
-  const sessions = getLocalSessions().filter(s => s.participantId !== participantId)
+  const sessions = getLocalSessions().map(s =>
+    s.participantId === participantId ? { ...s, deleted: true } : s
+  )
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(sessions))
+}
+
+export async function updateSession(participantId, updatedSession) {
+  if (supabase) {
+    const { error } = await supabase
+      .from('sessions')
+      .update(toRow(updatedSession))
+      .eq('participant_id', participantId)
+    if (!error) return
+    console.warn('Supabase update failed, falling back to localStorage:', error)
+  }
+  const sessions = getLocalSessions().map(s => s.participantId === participantId ? updatedSession : s)
   localStorage.setItem(STORAGE_KEY, JSON.stringify(sessions))
 }
 

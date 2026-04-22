@@ -5,14 +5,29 @@ import BackgroundQuestionnaire from './components/study/BackgroundQuestionnaire'
 import ContractGroup from './components/study/ContractGroup'
 import ThankYouScreen from './components/study/ThankYouScreen'
 import AdminPanel from './components/admin/AdminPanel'
+import AdminLogin from './components/admin/AdminLogin'
 import { contracts } from './data/contracts'
 import { seededShuffle } from './utils/randomize'
 import { saveSession, getStudyOpen } from './services/storage'
+import { supabase } from './services/supabase'
 import './App.css'
 
 function App() {
   const [isAdmin, setIsAdmin] = useState(() => window.location.hash === '#admin')
+  const [adminAuthed, setAdminAuthed] = useState(false)
+  const [isOwner, setIsOwner] = useState(false)
+  const [authChecked, setAuthChecked] = useState(false)
   const [theme, setTheme] = useState(() => localStorage.getItem('proxyscope_theme') || 'light')
+
+  useEffect(() => {
+    if (!supabase) { setAuthChecked(true); return }
+    supabase.auth.getSession().then(({ data }) => {
+      const email = data.session?.user?.email
+      if (email === 'omar@admin.com') setIsOwner(true)
+      if (data.session && isAdmin) setAdminAuthed(true)
+      setAuthChecked(true)
+    })
+  }, [isAdmin])
 
   useEffect(() => {
     const handleHash = () => setIsAdmin(window.location.hash === '#admin')
@@ -65,7 +80,11 @@ function App() {
     }
   }
 
-  if (isAdmin) return <AdminPanel />
+  if (isAdmin) {
+    if (!supabase) return <p style={{ padding: '2rem' }}>Supabase not configured.</p>
+    if (!adminAuthed) return <AdminLogin onLogin={() => setAdminAuthed(true)} />
+    return <AdminPanel onLogout={() => setAdminAuthed(false)} />
+  }
 
   if (!getStudyOpen()) return (
     <div className="study-closed-screen">
@@ -77,7 +96,7 @@ function App() {
     </div>
   )
 
-  if (screen === 'welcome') return <WelcomeScreen onStart={handleStart} theme={theme} onToggleTheme={toggleTheme} />
+  if (screen === 'welcome') return <WelcomeScreen onStart={handleStart} theme={theme} onToggleTheme={toggleTheme} showThemeToggle={authChecked && isOwner} />
   if (screen === 'questionnaire') return <BackgroundQuestionnaire onComplete={handleQuestionnaireComplete} />
   if (screen === 'contract') {
     const contractId = contractOrder[currentContractIndex]
