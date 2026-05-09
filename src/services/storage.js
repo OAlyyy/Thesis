@@ -61,14 +61,12 @@ export async function deleteSession(participantId) {
   if (supabase) {
     const { error } = await supabase
       .from('sessions')
-      .update({ deleted_at: new Date().toISOString() })
+      .delete()
       .eq('participant_id', participantId)
     if (!error) return
-    console.warn('Supabase soft-delete failed, falling back to localStorage:', error)
+    console.warn('Supabase delete failed, falling back to localStorage:', error)
   }
-  const sessions = getLocalSessions().map(s =>
-    s.participantId === participantId ? { ...s, deleted: true } : s
-  )
+  const sessions = getLocalSessions().filter(s => s.participantId !== participantId)
   localStorage.setItem(STORAGE_KEY, JSON.stringify(sessions))
 }
 

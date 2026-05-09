@@ -42,7 +42,7 @@ function WelcomeScreen({ onStart, theme, onToggleTheme, showThemeToggle }) {
           <div className="study-fact">
             <span className="fact-icon"><FiClock /></span>
             <div>
-              <p className="fact-label">20 – 40 min</p>
+              <p className="fact-label">15 – 25 min</p>
               <p className="fact-desc">Estimated duration</p>
             </div>
           </div>

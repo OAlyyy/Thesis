@@ -108,13 +108,19 @@ function AdminPanel({ onLogout }) {
   const [studyOpen, setStudyOpenState] = useState(() => getStudyOpen())
   const [tab, setTab] = useState('participants')
   const [exportOpen, setExportOpen] = useState(false)
+  const [loading, setLoading] = useState(true)
 
   const [confirmLogout, setConfirmLogout] = useState(false)
   const exportRef = useRef(null)
 
-  useEffect(() => { getAllSessions().then(setSessions) }, [])
+  useEffect(() => {
+    getAllSessions().then(data => { setSessions(data); setLoading(false) })
+  }, [])
 
-  function refresh() { getAllSessions().then(setSessions) }
+  function refresh() {
+    setLoading(true)
+    getAllSessions().then(data => { setSessions(data); setLoading(false) })
+  }
 
   function handleAIToggle(val) {
     setAIEnabled(val)
@@ -424,7 +430,25 @@ function AdminPanel({ onLogout }) {
       </div>
 
       {/* Sessions table */}
-      {sessions.length === 0 ? (
+      {loading ? (
+        <table className="admin-table">
+          <thead>
+            <tr>
+              <th>#</th><th>Participant ID</th><th>Timestamp</th><th>Order</th>
+              <th>A time</th><th>B time</th><th>C time</th><th>D time</th><th>Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            {Array.from({ length: 5 }).map((_, i) => (
+              <tr key={i} className="skeleton-row">
+                {[16, 120, 100, 60, 40, 40, 40, 40, 100].map((w, j) => (
+                  <td key={j}><div className="skeleton-cell" style={{ width: w }} /></td>
+                ))}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      ) : sessions.length === 0 ? (
         <p style={{ color: 'var(--text-muted)', textAlign: 'center', padding: '3rem 0' }}>No participant data yet.</p>
       ) : (
         <table className="admin-table">

@@ -80,6 +80,13 @@ function App() {
     }
   }
 
+  if (!authChecked) return (
+    <div className="splash-screen">
+      <span className="splash-title">ProxyScope</span>
+      <div className="spinner" />
+    </div>
+  )
+
   if (isAdmin) {
     if (!supabase) return <p style={{ padding: '2rem' }}>Supabase not configured.</p>
     if (!adminAuthed) return <AdminLogin onLogin={() => setAdminAuthed(true)} />
