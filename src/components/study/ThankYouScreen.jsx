@@ -1,7 +1,5 @@
-import { useState } from 'react';
 import { generateCSV, downloadCSV } from '../../utils/csvExport';
 import { contracts } from '../../data/contracts';
-import ResultsReview from './ResultsReview';
 
 function formatTime(seconds) {
   if (seconds === undefined || seconds === null || seconds === '') return '—';
@@ -41,7 +39,6 @@ function RoundTable({ contractOrder, contractResults }) {
 }
 
 function ThankYouScreen({ participantId, backgroundAnswers, contractOrder, contractResults, sessionSeed, rounds, numRounds = 1 }) {
-  const [showReview, setShowReview] = useState(false);
 
   const handleDownload = () => {
     if (numRounds > 1 && rounds && rounds.length > 0) {
@@ -96,19 +93,8 @@ function ThankYouScreen({ participantId, backgroundAnswers, contractOrder, contr
             <button className="btn-primary btn-large" onClick={handleDownload}>
               Download Results (CSV)
             </button>
-            <button className="btn-secondary btn-large" onClick={() => setShowReview(true)}>
-              Review My Answers
-            </button>
           </div>
         </div>
-
-        {showReview && (
-          <ResultsReview
-            contractOrder={contractOrder}
-            contractResults={contractResults}
-            onClose={() => setShowReview(false)}
-          />
-        )}
 
         <p className="admin-footer-link">
           <a href="#admin">Admin</a>
