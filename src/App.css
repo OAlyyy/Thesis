@@ -1390,3 +1390,59 @@
   color: inherit;
   text-decoration: none;
 }
+
+/* ============================================================
+   Round Complete Screen
+   ============================================================ */
+
+.roundcomplete-card {
+  max-width: 520px;
+  margin: 0 auto;
+  padding: 2.5rem 2rem;
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: 1rem;
+  text-align: center;
+}
+
+.roundcomplete-icon {
+  font-size: 3rem;
+  color: var(--success);
+  margin-bottom: 1rem;
+  line-height: 1;
+}
+
+.roundcomplete-title {
+  font-size: 1.75rem;
+  font-weight: 800;
+  color: var(--text-primary);
+  margin-bottom: 1rem;
+}
+
+.roundcomplete-body {
+  font-size: 0.95rem;
+  color: var(--text-secondary);
+  margin-bottom: 0.75rem;
+  line-height: 1.6;
+}
+
+.roundcomplete-progress {
+  display: flex;
+  justify-content: center;
+  gap: 0.5rem;
+  margin: 1.5rem 0;
+}
+
+.roundcomplete-pip {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+}
+
+.pip-done { background: var(--success); }
+.pip-upcoming { background: var(--border-strong); }
+
+.round-badge {
+  font-weight: 700;
+  color: var(--primary-text);
+}

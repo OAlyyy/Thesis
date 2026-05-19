@@ -23,23 +23,30 @@ ${code}`;
 
 async function callGroq(code, model) {
   const apiKey = import.meta.env.VITE_GROQ_KEY;
-  const response = await fetch(GROQ_API_URL, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${apiKey}`,
-    },
-    body: JSON.stringify({
-      model,
-      messages: [{ role: 'user', content: PROMPT(code) }],
-      temperature: 0.7,
-    }),
-  });
-  if (!response.ok) throw new Error(`Groq ${response.status}`);
-  const data = await response.json();
-  const raw = data.choices[0].message.content.trim();
-  const parsed = JSON.parse(raw);
-  return { variedCode: parsed.code, nameMapping: parsed.renames || {} };
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 8000);
+  try {
+    const response = await fetch(GROQ_API_URL, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${apiKey}`,
+      },
+      body: JSON.stringify({
+        model,
+        messages: [{ role: 'user', content: PROMPT(code) }],
+        temperature: 0.7,
+      }),
+      signal: controller.signal,
+    });
+    if (!response.ok) throw new Error(`Groq ${response.status}`);
+    const data = await response.json();
+    const raw = data.choices[0].message.content.trim();
+    const parsed = JSON.parse(raw);
+    return { variedCode: parsed.code, nameMapping: parsed.renames || {} };
+  } finally {
+    clearTimeout(timeout);
+  }
 }
 
 const NO_VARIATION = { variedCode: null, nameMapping: {} };

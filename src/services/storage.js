@@ -12,6 +12,7 @@ function toRow(session) {
     contract_order:     session.contractOrder,
     background_answers: session.backgroundAnswers,
     contract_results:   session.contractResults,
+    rounds:             session.rounds ?? null,
   }
 }
 
@@ -23,6 +24,7 @@ function fromRow(row) {
     contractOrder:     row.contract_order,
     backgroundAnswers: row.background_answers,
     contractResults:   row.contract_results,
+    rounds:            row.rounds ?? null,
   }
 }
 
@@ -106,4 +108,71 @@ export function getStudyOpen() {
 }
 export function setStudyOpen(val) {
   localStorage.setItem('proxyscope_study_open', val ? 'true' : 'false')
+}
+
+export async function recoverLocalToSupabase() {
+  if (!supabase) return { ok: 0, failed: 0, error: 'Supabase not configured' }
+
+  // Collect sessions from proxyscope_sessions
+  const byId = {}
+  for (const s of getLocalSessions()) {
+    byId[s.participantId] = s
+  }
+
+  // Also check proxyscope_progress — may have more complete round data
+  try {
+    const progress = JSON.parse(localStorage.getItem('proxyscope_progress') || 'null')
+    if (progress?.participantId && progress?.completedRounds?.length > 0) {
+      const existing = byId[progress.participantId]
+      const existingRounds = existing?.rounds?.length ?? 0
+      if (progress.completedRounds.length > existingRounds) {
+        const r1 = progress.completedRounds[0]
+        byId[progress.participantId] = {
+          participantId: progress.participantId,
+          timestamp: new Date().toISOString(),
+          sessionSeed: r1.session_seed,
+          contractOrder: r1.contract_order,
+          backgroundAnswers: progress.backgroundAnswers,
+          contractResults: r1.contract_results,
+          rounds: progress.completedRounds,
+        }
+      }
+    }
+  } catch { /* ignore */ }
+
+  const sessions = Object.values(byId)
+  if (sessions.length === 0) return { ok: 0, failed: 0, error: 'No local sessions found' }
+
+  let ok = 0, failed = 0
+  for (const session of sessions) {
+    const { error } = await supabase.from('sessions').upsert(toRow(session))
+    if (error) { failed++; console.error('Recover upsert error:', error); continue }
+    ok++
+  }
+  return { ok, failed }
+}
+
+export function getNumRounds() {
+  return localStorage.getItem('proxyscope_num_rounds') === '3' ? 3 : 1
+}
+export function setNumRounds(val) {
+  localStorage.setItem('proxyscope_num_rounds', val === 3 ? '3' : '1')
+}
+
+// isFinal=true → also push to Supabase (single insert at end of study)
+// isFinal=false → localStorage only (avoids RLS UPDATE issues mid-study)
+export async function upsertRound(session, isFinal = false) {
+  // Always write to localStorage
+  const sessions = getLocalSessions()
+  const idx = sessions.findIndex(s => s.participantId === session.participantId)
+  if (idx >= 0) sessions[idx] = session
+  else sessions.push(session)
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(sessions))
+
+  if (isFinal && supabase) {
+    // Delete any existing row first so we always do a clean INSERT (avoids RLS UPDATE issues)
+    await supabase.from('sessions').delete().eq('participant_id', session.participantId)
+    const { error } = await supabase.from('sessions').insert(toRow(session))
+    if (error) console.warn('Supabase final save failed (data saved locally):', error)
+  }
 }

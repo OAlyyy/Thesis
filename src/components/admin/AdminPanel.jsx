@@ -1,37 +1,45 @@
 import { useState, useEffect, useRef } from 'react'
 import { FiRefreshCw, FiChevronDown, FiLogOut, FiArrowLeft } from 'react-icons/fi'
-import { getAllSessions, deleteSession, clearAllSessions, updateSession, getAIEnabled, setAIEnabled, getStudyOpen, setStudyOpen } from '../../services/storage'
-import { generateCSV, downloadCSV } from '../../utils/csvExport'
-import { contracts } from '../../data/contracts'
+import { getAllSessions, deleteSession, clearAllSessions, updateSession, getAIEnabled, setAIEnabled, getStudyOpen, setStudyOpen, getNumRounds, setNumRounds } from '../../services/storage'
+import { generateCSV, downloadCSV, generateJamoviCSV } from '../../utils/csvExport'
+import { contracts, contractsRound2, contractsRound3 } from '../../data/contracts'
+const ALL_CONTRACTS = { ...contracts, ...contractsRound2, ...contractsRound3 }
 import ResultsReview from '../study/ResultsReview'
 import AdminAnalytics from './AdminAnalytics'
 import { supabase } from '../../services/supabase'
 
+function sessionToCSVRows(s) {
+  if (s.rounds && s.rounds.length > 1) {
+    return s.rounds.map(r =>
+      generateCSV(s.participantId, s.backgroundAnswers, r.contract_order, r.contract_results, r.session_seed)
+    )
+  }
+  return [generateCSV(s.participantId, s.backgroundAnswers, s.contractOrder, s.contractResults, s.sessionSeed)]
+}
+
 function exportAll(sessions) {
   if (sessions.length === 0) return
-  const rows = sessions.map(s =>
-    generateCSV(s.participantId, s.backgroundAnswers, s.contractOrder, s.contractResults, s.sessionSeed)
-  )
-  const header = rows[0].split('\n')[0]
-  const dataRows = rows.map(r => r.split('\n').slice(1).join('\n')).filter(Boolean)
+  const allRows = sessions.flatMap(sessionToCSVRows)
+  const header = allRows[0].split('\n')[0]
+  const dataRows = allRows.map(r => r.split('\n').slice(1).join('\n')).filter(Boolean)
   const combined = [header, ...dataRows].join('\n')
   downloadCSV(combined, `proxyscope_all_${new Date().toISOString().slice(0, 10)}.csv`)
 }
 
 function exportSingle(session) {
-  const csv = generateCSV(
-    session.participantId,
-    session.backgroundAnswers,
-    session.contractOrder,
-    session.contractResults,
-    session.sessionSeed
-  )
-  downloadCSV(csv, `proxyscope_${session.participantId.slice(0, 8)}_${new Date().toISOString().slice(0, 10)}.csv`)
+  const rows = sessionToCSVRows(session)
+  const header = rows[0].split('\n')[0]
+  const dataRows = rows.map(r => r.split('\n').slice(1).join('\n')).filter(Boolean)
+  const combined = [header, ...dataRows].join('\n')
+  downloadCSV(combined, `proxyscope_${session.participantId.slice(0, 8)}_${new Date().toISOString().slice(0, 10)}.csv`)
 }
 
 function avgTime(sessions, contractId) {
   const times = sessions
-    .map(s => s.contractResults?.[contractId]?.timeSpent)
+    .flatMap(s => {
+      if (s.rounds && s.rounds.length > 1) return s.rounds.map(r => r.contract_results?.[contractId]?.timeSpent)
+      return [s.contractResults?.[contractId]?.timeSpent]
+    })
     .filter(t => t !== undefined && t !== null && t !== '')
     .map(Number).filter(n => !isNaN(n))
   if (times.length === 0) return '—'
@@ -40,7 +48,10 @@ function avgTime(sessions, contractId) {
 
 function avgDifficulty(sessions, contractId) {
   const vals = sessions
-    .map(s => s.contractResults?.[contractId]?.answers?.difficulty)
+    .flatMap(s => {
+      if (s.rounds && s.rounds.length > 1) return s.rounds.map(r => r.contract_results?.[contractId]?.answers?.difficulty)
+      return [s.contractResults?.[contractId]?.answers?.difficulty]
+    })
     .filter(v => v !== undefined && v !== null && v !== '')
     .map(Number).filter(n => !isNaN(n))
   if (vals.length === 0) return '—'
@@ -106,6 +117,7 @@ function AdminPanel({ onLogout }) {
   const [editSaved, setEditSaved] = useState(false)
   const [aiEnabled, setAIEnabledState] = useState(() => getAIEnabled())
   const [studyOpen, setStudyOpenState] = useState(() => getStudyOpen())
+  const [numRoundsState, setNumRoundsState] = useState(() => getNumRounds())
   const [tab, setTab] = useState('participants')
   const [exportOpen, setExportOpen] = useState(false)
   const [loading, setLoading] = useState(true)
@@ -130,6 +142,53 @@ function AdminPanel({ onLogout }) {
   function handleStudyToggle(val) {
     setStudyOpen(val)
     setStudyOpenState(val)
+  }
+
+  function handleNumRoundsToggle(val) {
+    setNumRounds(val ? 3 : 1)
+    setNumRoundsState(val ? 3 : 1)
+  }
+
+  async function insertTestSession() {
+    const fakeId = 'TEST-' + Math.random().toString(36).slice(2, 8).toUpperCase()
+    const makeResult = (q2ans, q3ans, extraQs = {}) => ({
+      timeSpent: Math.floor(Math.random() * 200) + 40,
+      timerExpired: false,
+      answers: { q1: 'Test answer.', q2: q2ans, q3: q3ans, q4: 'Test answer.', q5: 'Test answer.', ...extraQs, difficulty: String(Math.floor(Math.random() * 4) + 1) },
+      canonicalAnswers: { q1: 'Test answer.', q2: q2ans, q3: q3ans, q4: 'Test answer.', q5: 'Test answer.', ...extraQs, difficulty: String(Math.floor(Math.random() * 4) + 1) },
+    })
+    const rounds = [
+      { round_number: 1, session_seed: 111111, contract_order: ['A','B','C','D'], contract_results: {
+        A: makeResult('SimpleStorage directly', 'In SimpleStorage'),
+        B: makeResult('Proxy forwards the call to SimpleStorageV2', 'In the Proxy contract', { q6: 'In the Proxy contract', q7: 'Test answer.' }),
+        C: makeResult('Only the address that deployed the contract', 'The second call is rejected'),
+        D: makeResult('VotingSystemV2 via delegatecall', 'In VotingProxy'),
+      }},
+      { round_number: 2, session_seed: 222222, contract_order: ['E','F','G','H'], contract_results: {
+        E: makeResult('TokenBalance directly', 'In TokenBalance', { q6: 'Balances are lost, the new contract starts with an empty mapping' }),
+        F: makeResult('BalanceProxy forwards the call to TokenBalanceV2', 'In BalanceProxy', { q6: 'To balance[A] in BalanceProxy', q7: 'Test answer.' }),
+        G: makeResult('Only the depositor', 'The transaction reverts'),
+        H: makeResult('EscrowSystemV2 via delegatecall', 'In EscrowProxy', { q6: 'Yes, upgradeTo() has no restrictions beyond the owner check' }),
+      }},
+      { round_number: 3, session_seed: 333333, contract_order: ['I','J','K','L'], contract_results: {
+        I: makeResult('AccessControl directly', 'In AccessControl', { q6: "Yes, revokeRole() can be called with the admin's own address" }),
+        J: makeResult('AccessProxy forwards the call to AccessControlV2', 'In AccessProxy', { q6: "In AccessControlV2's own storage" }),
+        K: makeResult('Anyone, once the auction time has passed', 'They are added to the bids mapping so the previous bidder can withdraw later'),
+        L: makeResult('AuctionSystemV2 via delegatecall', 'In AuctionProxy', { q6: 'The new implementation could have different withdrawal logic or no withdrawBid() at all, potentially locking funds' }),
+      }},
+    ]
+    const session = {
+      participant_id: fakeId,
+      timestamp: new Date().toISOString(),
+      session_seed: 111111,
+      contract_order: ['A','B','C','D'],
+      background_answers: { years_programming: 3, years_professional: 1, solidity_experience: '3', proxy_experience: 'No', peer_experience: '3', occupation: 'Test Participant', blockchain_familiarity: '2' },
+      contract_results: rounds[0].contract_results,
+      rounds,
+    }
+    const { error } = await supabase.from('sessions').upsert(session)
+    if (error) { alert('Insert failed: ' + error.message); return }
+    refresh()
   }
 
   async function handleDelete(participantId) {
@@ -223,56 +282,71 @@ function AdminPanel({ onLogout }) {
           <h3 style={{ fontSize: '1rem', fontWeight: 700, color: 'var(--text-secondary)', marginBottom: '0.75rem', borderBottom: '1px solid var(--border)', paddingBottom: '0.5rem' }}>
             Contract Results
           </h3>
-          {s.contractOrder && s.contractOrder.map((contractId) => {
-            const result = s.contractResults && s.contractResults[contractId]
-            const contract = contracts[contractId]
-            return (
-              <div key={contractId} style={{ marginBottom: '1.5rem', background: 'var(--bg-elevated)', border: '1px solid var(--border)', borderRadius: '0.5rem', padding: '1rem' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '0.75rem' }}>
-                  <strong style={{ fontSize: '0.95rem', color: 'var(--text-primary)' }}>
-                    {contract ? contract.label : `Contract ${contractId}`}
-                  </strong>
-                  {result && result.timerExpired && (
-                    <span className="expired-badge">Timer expired</span>
-                  )}
-                </div>
-                <p style={{ fontSize: '0.875rem', color: 'var(--text-secondary)', marginBottom: '0.75rem' }}>
-                  Time spent: {result && result.timeSpent !== undefined ? `${result.timeSpent}s` : '—'}
+          {(s.rounds && s.rounds.length > 1 ? s.rounds : [{ round_number: 1, contract_order: s.contractOrder, contract_results: s.contractResults }]).map((roundData) => (
+            <div key={roundData.round_number}>
+              {s.rounds && s.rounds.length > 1 && (
+                <p style={{ fontSize: '0.8rem', fontWeight: 700, color: 'var(--text-secondary)', margin: '1rem 0 0.5rem' }}>
+                  Round {roundData.round_number} — Order: {roundData.contract_order?.join('→')}
                 </p>
-                {result && result.variedCode && (
-                  <details style={{ marginBottom: '0.75rem' }}>
-                    <summary style={{ fontSize: '0.8rem', color: 'var(--primary-text)', cursor: 'pointer', userSelect: 'none', marginBottom: '0.5rem' }}>
-                      View contract shown to participant
-                    </summary>
-                    <pre style={{ background: '#1e1e1e', color: '#d4d4d4', padding: '1rem', borderRadius: '0.5rem', fontSize: '0.78rem', overflowX: 'auto', whiteSpace: 'pre-wrap', lineHeight: 1.5, margin: 0 }}>
-                      {result.variedCode}
-                    </pre>
-                  </details>
-                )}
-                {result && result.answers && contract && (
-                  <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.85rem' }}>
-                    <tbody>
-                      {(result.variedQuestions || contract.questions).map((q) => (
-                        <tr key={q.id}>
-                          <td style={{ padding: '0.35rem 0.5rem', fontWeight: 600, color: 'var(--text-secondary)', width: '55%', borderBottom: '1px solid var(--border)', verticalAlign: 'top' }}>
-                            {q.prompt}
-                          </td>
-                          <td style={{ padding: '0.35rem 0.5rem', color: 'var(--text-primary)', borderBottom: '1px solid var(--border)', verticalAlign: 'top' }}>
-                            {result.answers[q.id] !== undefined ? String(result.answers[q.id]) : '—'}
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                )}
-              </div>
-            )
-          })}
+              )}
+              {roundData.contract_order && roundData.contract_order.map((contractId) => {
+                const result = roundData.contract_results && roundData.contract_results[contractId]
+                const contract = ALL_CONTRACTS[contractId]
+                return (
+                  <div key={contractId} style={{ marginBottom: '1.5rem', background: 'var(--bg-elevated)', border: '1px solid var(--border)', borderRadius: '0.5rem', padding: '1rem' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '0.75rem' }}>
+                      <strong style={{ fontSize: '0.95rem', color: 'var(--text-primary)' }}>
+                        {contract ? contract.label : `Contract ${contractId}`}
+                      </strong>
+                      {result && result.timerExpired && (
+                        <span className="expired-badge">Timer expired</span>
+                      )}
+                    </div>
+                    <p style={{ fontSize: '0.875rem', color: 'var(--text-secondary)', marginBottom: '0.75rem' }}>
+                      Time spent: {result && result.timeSpent !== undefined ? `${result.timeSpent}s` : '—'}
+                    </p>
+                    {result && result.variedCode && (
+                      <details style={{ marginBottom: '0.75rem' }}>
+                        <summary style={{ fontSize: '0.8rem', color: 'var(--primary-text)', cursor: 'pointer', userSelect: 'none', marginBottom: '0.5rem' }}>
+                          View contract shown to participant
+                        </summary>
+                        <pre style={{ background: '#1e1e1e', color: '#d4d4d4', padding: '1rem', borderRadius: '0.5rem', fontSize: '0.78rem', overflowX: 'auto', whiteSpace: 'pre-wrap', lineHeight: 1.5, margin: 0 }}>
+                          {result.variedCode}
+                        </pre>
+                      </details>
+                    )}
+                    {result && result.answers && contract && (
+                      <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.85rem' }}>
+                        <tbody>
+                          {(result.variedQuestions || contract.questions).map((q) => (
+                            <tr key={q.id}>
+                              <td style={{ padding: '0.35rem 0.5rem', fontWeight: 600, color: 'var(--text-secondary)', width: '55%', borderBottom: '1px solid var(--border)', verticalAlign: 'top' }}>
+                                {q.prompt}
+                              </td>
+                              <td style={{ padding: '0.35rem 0.5rem', color: 'var(--text-primary)', borderBottom: '1px solid var(--border)', verticalAlign: 'top' }}>
+                                {result.answers[q.id] !== undefined ? String(result.answers[q.id]) : '—'}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    )}
+                  </div>
+                )
+              })}
+            </div>
+          ))}
         </section>
 
         <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap' }}>
           <button className="btn-secondary" onClick={() => exportSingle(s)}>
-            Export this participant (CSV)
+            Export CSV
+          </button>
+          <button className="btn-secondary" onClick={() => {
+            const csv = generateJamoviCSV([s])
+            downloadCSV(csv, `proxyscope_jamovi_${s.participantId.slice(0, 8)}_${new Date().toISOString().slice(0, 10)}.csv`)
+          }}>
+            Export Jamovi
           </button>
           <button className="btn-secondary" onClick={() => setReviewSession(s)}>
             Review Answers
@@ -338,6 +412,7 @@ function AdminPanel({ onLogout }) {
               }}>
                 {[
                   { label: 'Export CSV', action: () => { exportAll(sessions); setExportOpen(false) } },
+                  { label: 'Export Jamovi', action: () => { const csv = generateJamoviCSV(sessions); downloadCSV(csv, `proxyscope_jamovi_${new Date().toISOString().slice(0,10)}.csv`); setExportOpen(false) } },
                   { label: 'Backup JSON', action: () => { exportJSON(sessions); setExportOpen(false) } },
                 ].map(item => (
                   <button
@@ -379,12 +454,19 @@ function AdminPanel({ onLogout }) {
       <div style={{ display: 'flex', gap: '2rem', alignItems: 'center', padding: '0.75rem 1rem', background: 'var(--bg-elevated)', border: '1px solid var(--border)', borderRadius: '0.5rem', marginBottom: '1rem', flexWrap: 'wrap' }}>
         <TogglePill label="Study" enabled={studyOpen} onChange={handleStudyToggle} />
         <TogglePill label="AI Generation" enabled={aiEnabled} onChange={handleAIToggle} />
+        <TogglePill label="Multi-Round Study (3×)" enabled={numRoundsState === 3} onChange={handleNumRoundsToggle} />
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.8rem' }}>
           <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: apiKeyConfigured ? 'var(--success)' : 'var(--danger)', display: 'inline-block' }} />
           <span style={{ color: apiKeyConfigured ? 'var(--success-text)' : 'var(--danger-text)', fontWeight: 600 }}>
             {apiKeyConfigured ? 'Groq API configured' : 'No API key — using original contracts'}
           </span>
         </div>
+        <button
+          onClick={insertTestSession}
+          style={{ fontSize: '0.8rem', padding: '0.3rem 0.75rem', borderRadius: '0.4rem', border: '1px dashed var(--border)', background: 'transparent', color: 'var(--text-muted)', cursor: 'pointer' }}
+        >
+          + Insert test session
+        </button>
       </div>
 
       {/* Tab switcher */}
@@ -434,14 +516,14 @@ function AdminPanel({ onLogout }) {
         <table className="admin-table">
           <thead>
             <tr>
-              <th>#</th><th>Participant ID</th><th>Timestamp</th><th>Order</th>
+              <th>#</th><th>Participant ID</th><th>Timestamp</th><th>Rounds</th><th>Order (R1)</th>
               <th>A time</th><th>B time</th><th>C time</th><th>D time</th><th>Actions</th>
             </tr>
           </thead>
           <tbody>
             {Array.from({ length: 5 }).map((_, i) => (
               <tr key={i} className="skeleton-row">
-                {[16, 120, 100, 60, 40, 40, 40, 40, 100].map((w, j) => (
+                {[16, 120, 100, 30, 60, 40, 40, 40, 40, 100].map((w, j) => (
                   <td key={j}><div className="skeleton-cell" style={{ width: w }} /></td>
                 ))}
               </tr>
@@ -457,7 +539,8 @@ function AdminPanel({ onLogout }) {
               <th>#</th>
               <th>Participant ID</th>
               <th>Timestamp</th>
-              <th>Order</th>
+              <th>Rounds</th>
+              <th>Order (R1)</th>
               <th>A time</th>
               <th>B time</th>
               <th>C time</th>
@@ -485,6 +568,7 @@ function AdminPanel({ onLogout }) {
                     {s.participantId ? s.participantId.slice(0, 8) + '...' : '—'}
                   </td>
                   <td>{s.timestamp ? new Date(s.timestamp).toLocaleString() : '—'}</td>
+                  <td>{s.rounds ? s.rounds.length : '1'}</td>
                   <td>{s.contractOrder ? s.contractOrder.join('→') : '—'}</td>
                   <td>{getTime('A')}</td>
                   <td>{getTime('B')}</td>

@@ -34,7 +34,7 @@ function reverseMapAnswers(answers, mapping) {
   );
 }
 
-function ContractGroup({ contract, contractIndex, onComplete }) {
+function ContractGroup({ contract, contractIndex, onComplete, totalRounds = 1, currentRound = 1 }) {
   const [variedCode, setVariedCode] = useState(null);
   const [variedQuestions, setVariedQuestions] = useState(contract.questions);
   const [nameMapping, setNameMapping] = useState({});
@@ -93,6 +93,7 @@ function ContractGroup({ contract, contractIndex, onComplete }) {
   };
 
   const isLastContract = contractIndex === 3;
+  const isLastRound = currentRound === totalRounds;
 
   if (loading) {
     return (
@@ -110,9 +111,10 @@ function ContractGroup({ contract, contractIndex, onComplete }) {
       <div className="contract-card">
         <div className="contract-header">
           <div className="progress-indicator">
+            {totalRounds > 1 && <span className="round-badge">Round {currentRound}/{totalRounds} &mdash; </span>}
             Contract {contractIndex + 1} of 4
           </div>
-          <h2 className="contract-label">{contract.label}</h2>
+          <h2 className="contract-label">Contract {contract.id}</h2>
         </div>
 
         <div className="timer-wrapper">
@@ -157,7 +159,9 @@ function ContractGroup({ contract, contractIndex, onComplete }) {
             onClick={handleSubmit}
             disabled={!allAnswered || submitted}
           >
-            {isLastContract ? 'Complete Study' : 'Next Contract'}
+            {isLastContract
+              ? (isLastRound ? 'Complete Study' : `Complete Round ${currentRound}`)
+              : 'Next Contract'}
           </button>
           {!allAnswered && (
             <p className="submit-hint">Please answer all questions to continue.</p>

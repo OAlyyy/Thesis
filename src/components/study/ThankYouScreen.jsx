@@ -11,13 +11,51 @@ function formatTime(seconds) {
   return `${String(m).padStart(2, '0')}:${String(rem).padStart(2, '0')}`;
 }
 
-function ThankYouScreen({ participantId, backgroundAnswers, contractOrder, contractResults, sessionSeed }) {
+function RoundTable({ contractOrder, contractResults }) {
+  return (
+    <table className="summary-table">
+      <thead>
+        <tr>
+          <th>Contract</th>
+          <th>Label</th>
+          <th>Time Spent</th>
+          <th>Timer Expired</th>
+        </tr>
+      </thead>
+      <tbody>
+        {contractOrder && contractOrder.map((contractId, idx) => {
+          const result = contractResults[contractId];
+          const contract = contracts[contractId];
+          return (
+            <tr key={contractId}>
+              <td>{idx + 1}</td>
+              <td>{contract ? contract.label : contractId}</td>
+              <td>{result ? formatTime(result.timeSpent) : '—'}</td>
+              <td>{result ? (result.timerExpired ? 'Yes' : 'No') : '—'}</td>
+            </tr>
+          );
+        })}
+      </tbody>
+    </table>
+  );
+}
+
+function ThankYouScreen({ participantId, backgroundAnswers, contractOrder, contractResults, sessionSeed, rounds, numRounds = 1 }) {
   const [showReview, setShowReview] = useState(false);
 
   const handleDownload = () => {
-    const csv = generateCSV(participantId, backgroundAnswers, contractOrder, contractResults, sessionSeed);
-    const filename = `contractlens_${participantId.slice(0, 8)}_${Date.now()}.csv`;
-    downloadCSV(csv, filename);
+    if (numRounds > 1 && rounds && rounds.length > 0) {
+      const csvRows = rounds.map(r =>
+        generateCSV(participantId, backgroundAnswers, r.contract_order, r.contract_results, r.session_seed)
+      );
+      const header = csvRows[0].split('\n')[0];
+      const dataLines = csvRows.map(r => r.split('\n').slice(1).join('\n')).filter(Boolean);
+      const combined = [header, ...dataLines].join('\n');
+      downloadCSV(combined, `contractlens_${participantId.slice(0, 8)}_${Date.now()}.csv`);
+    } else {
+      const csv = generateCSV(participantId, backgroundAnswers, contractOrder, contractResults, sessionSeed);
+      downloadCSV(csv, `contractlens_${participantId.slice(0, 8)}_${Date.now()}.csv`);
+    }
   };
 
   return (
@@ -36,30 +74,18 @@ function ThankYouScreen({ participantId, backgroundAnswers, contractOrder, contr
 
         <div className="summary-section">
           <h3 className="summary-title">Time Spent Per Contract</h3>
-          <table className="summary-table">
-            <thead>
-              <tr>
-                <th>Contract</th>
-                <th>Label</th>
-                <th>Time Spent</th>
-                <th>Timer Expired</th>
-              </tr>
-            </thead>
-            <tbody>
-              {contractOrder && contractOrder.map((contractId, idx) => {
-                const result = contractResults[contractId];
-                const contract = contracts[contractId];
-                return (
-                  <tr key={contractId}>
-                    <td>{idx + 1}</td>
-                    <td>{contract ? contract.label : contractId}</td>
-                    <td>{result ? formatTime(result.timeSpent) : '—'}</td>
-                    <td>{result ? (result.timerExpired ? 'Yes' : 'No') : '—'}</td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
+          {numRounds > 1 && rounds && rounds.length > 0 ? (
+            rounds.map(r => (
+              <div key={r.round_number} style={{ marginBottom: '1rem' }}>
+                <p style={{ fontSize: '0.8rem', fontWeight: 700, color: 'var(--text-secondary)', marginBottom: '0.4rem' }}>
+                  Round {r.round_number}
+                </p>
+                <RoundTable contractOrder={r.contract_order} contractResults={r.contract_results} />
+              </div>
+            ))
+          ) : (
+            <RoundTable contractOrder={contractOrder} contractResults={contractResults} />
+          )}
         </div>
 
         <div className="download-section">

@@ -4,11 +4,12 @@ import WelcomeScreen from './components/study/WelcomeScreen'
 import BackgroundQuestionnaire from './components/study/BackgroundQuestionnaire'
 import ContractGroup from './components/study/ContractGroup'
 import ThankYouScreen from './components/study/ThankYouScreen'
+import RoundCompleteScreen from './components/study/RoundCompleteScreen'
 import AdminPanel from './components/admin/AdminPanel'
 import AdminLogin from './components/admin/AdminLogin'
-import { contracts } from './data/contracts'
+import { contractsByRound } from './data/contracts'
 import { seededShuffle } from './utils/randomize'
-import { saveSession, getStudyOpen } from './services/storage'
+import { upsertRound, getStudyOpen, getNumRounds } from './services/storage'
 import { supabase } from './services/supabase'
 import './App.css'
 
@@ -42,18 +43,48 @@ function App() {
 
   const toggleTheme = () => setTheme(t => t === 'light' ? 'dark' : 'light')
 
-  const [screen, setScreen] = useState('welcome')
-  const [participantId] = useState(() => uuidv4())
-  const [sessionSeed] = useState(() => Math.floor(Math.random() * 1000000))
-  const [backgroundAnswers, setBackgroundAnswers] = useState(null)
-  const [contractOrder, setContractOrder] = useState(null)
-  const [currentContractIndex, setCurrentContractIndex] = useState(0)
-  const [contractResults, setContractResults] = useState({})
+  // ── Resume support ────────────────────────────────────────────
+  const PROGRESS_KEY = 'proxyscope_progress'
+  const savedProgress = (() => {
+    try { return JSON.parse(localStorage.getItem(PROGRESS_KEY)) } catch { return null }
+  })()
+
+  const [screen, setScreen] = useState(() => {
+    const s = savedProgress?.screen
+    // Don't resume to welcome/questionnaire — those are quick to redo
+    return (s && s !== 'welcome' && s !== 'questionnaire') ? s : 'welcome'
+  })
+  const [participantId] = useState(() => savedProgress?.participantId || uuidv4())
+  const [backgroundAnswers, setBackgroundAnswers] = useState(() => savedProgress?.backgroundAnswers || null)
+
+  const [numRounds, setNumRounds] = useState(() => savedProgress?.numRounds || 1)
+  const [currentRound, setCurrentRound] = useState(() => savedProgress?.currentRound || 1)
+  const [completedRounds, setCompletedRounds] = useState(() => savedProgress?.completedRounds || [])
+
+  const [roundSeed, setRoundSeed] = useState(() => savedProgress?.roundSeed || Math.floor(Math.random() * 1000000))
+  const [contractOrder, setContractOrder] = useState(() => savedProgress?.contractOrder || null)
+  const [currentContractIndex, setCurrentContractIndex] = useState(() => savedProgress?.currentContractIndex || 0)
+  const [contractResults, setContractResults] = useState(() => savedProgress?.contractResults || {})
+
+  // Save progress to localStorage whenever study state changes
+  useEffect(() => {
+    if (screen === 'welcome') return // nothing to save yet
+    if (screen === 'thankyou') { localStorage.removeItem(PROGRESS_KEY); return }
+    localStorage.setItem(PROGRESS_KEY, JSON.stringify({
+      participantId, screen, backgroundAnswers,
+      numRounds, currentRound, completedRounds,
+      roundSeed, contractOrder, currentContractIndex, contractResults,
+    }))
+  }, [screen, backgroundAnswers, numRounds, currentRound, completedRounds,
+      roundSeed, contractOrder, currentContractIndex, contractResults])
 
   const handleStart = () => setScreen('questionnaire')
 
   const handleQuestionnaireComplete = (answers) => {
-    const order = seededShuffle(['A', 'B', 'C', 'D'], sessionSeed)
+    const n = getNumRounds()
+    const roundSet = contractsByRound[1]
+    const order = seededShuffle(roundSet.ids, roundSeed)
+    setNumRounds(n)
     setBackgroundAnswers(answers)
     setContractOrder(order)
     setScreen('contract')
@@ -66,18 +97,51 @@ function App() {
 
     if (currentContractIndex < 3) {
       setCurrentContractIndex(currentContractIndex + 1)
+      return
+    }
+
+    // Round complete — build round record
+    const completedRound = {
+      round_number: currentRound,
+      session_seed: roundSeed,
+      contract_order: contractOrder,
+      contract_results: newResults,
+    }
+    const newCompletedRounds = [...completedRounds, completedRound]
+    setCompletedRounds(newCompletedRounds)
+
+    // Top-level columns mirror round 1 for backward compat
+    const round1 = newCompletedRounds[0]
+    const sessionData = {
+      participantId,
+      timestamp: new Date().toISOString(),
+      sessionSeed: round1.session_seed,
+      contractOrder: round1.contract_order,
+      backgroundAnswers,
+      contractResults: round1.contract_results,
+      rounds: numRounds > 1 ? newCompletedRounds : null,
+    }
+    const isFinalRound = !(numRounds > 1 && currentRound < numRounds)
+    await upsertRound(sessionData, isFinalRound)
+
+    if (numRounds > 1 && currentRound < numRounds) {
+      setScreen('roundcomplete')
     } else {
-      const sessionData = {
-        participantId,
-        sessionSeed,
-        timestamp: new Date().toISOString(),
-        backgroundAnswers,
-        contractOrder,
-        contractResults: newResults,
-      }
-      await saveSession(sessionData)
       setScreen('thankyou')
     }
+  }
+
+  const handleStartNextRound = () => {
+    const nextRound = currentRound + 1
+    const nextSeed = Math.floor(Math.random() * 1000000)
+    const roundSet = contractsByRound[nextRound] || contractsByRound[1]
+    const nextOrder = seededShuffle(roundSet.ids, nextSeed)
+    setCurrentRound(nextRound)
+    setRoundSeed(nextSeed)
+    setContractOrder(nextOrder)
+    setCurrentContractIndex(0)
+    setContractResults({})
+    setScreen('contract')
   }
 
   if (!authChecked) return (
@@ -105,13 +169,23 @@ function App() {
 
   if (screen === 'welcome') return <WelcomeScreen onStart={handleStart} theme={theme} onToggleTheme={toggleTheme} showThemeToggle={authChecked && isOwner} />
   if (screen === 'questionnaire') return <BackgroundQuestionnaire onComplete={handleQuestionnaireComplete} />
+  if (screen === 'roundcomplete') return (
+    <RoundCompleteScreen
+      completedRound={currentRound}
+      totalRounds={numRounds}
+      onContinue={handleStartNextRound}
+    />
+  )
   if (screen === 'contract') {
     const contractId = contractOrder[currentContractIndex]
+    const roundContracts = (contractsByRound[currentRound] || contractsByRound[1]).contracts
     return (
       <ContractGroup
-        key={contractId}
-        contract={contracts[contractId]}
+        key={`r${currentRound}-${contractId}`}
+        contract={roundContracts[contractId]}
         contractIndex={currentContractIndex}
+        totalRounds={numRounds}
+        currentRound={currentRound}
         onComplete={handleContractComplete}
       />
     )
@@ -120,9 +194,11 @@ function App() {
     <ThankYouScreen
       participantId={participantId}
       backgroundAnswers={backgroundAnswers}
-      contractOrder={contractOrder}
-      contractResults={contractResults}
-      sessionSeed={sessionSeed}
+      contractOrder={completedRounds[0]?.contract_order ?? contractOrder}
+      contractResults={completedRounds[0]?.contract_results ?? contractResults}
+      sessionSeed={completedRounds[0]?.session_seed ?? roundSeed}
+      rounds={completedRounds}
+      numRounds={numRounds}
     />
   )
 }

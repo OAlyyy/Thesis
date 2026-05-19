@@ -1,7 +1,14 @@
-import { contracts } from '../../data/contracts'
+import { contracts, contractsRound2, contractsRound3, ROUND_CATEGORY_MAP } from '../../data/contracts'
 
+const ALL_CONTRACTS = { ...contracts, ...contractsRound2, ...contractsRound3 }
 const CONTRACT_COLORS = ['#4F46E5', '#0EA5E9', '#10B981', '#F59E0B']
-const CONTRACT_IDS = ['A', 'B', 'C', 'D']
+const CATEGORIES = ['small_noproxy', 'small_proxy', 'large_noproxy', 'large_proxy']
+const CATEGORY_LABELS = {
+  small_noproxy:  'Small / No Proxy',
+  small_proxy:    'Small / Proxy',
+  large_noproxy:  'Large / No Proxy',
+  large_proxy:    'Large / Proxy',
+}
 
 function StatCard({ label, value, sub, color }) {
   return (
@@ -65,6 +72,13 @@ function TwoCol({ children }) {
 function avg(arr) { return arr.length ? Math.round(arr.reduce((a, b) => a + b, 0) / arr.length) : 0 }
 function avgF(arr) { return arr.length ? (arr.reduce((a, b) => a + b, 0) / arr.length).toFixed(2) : '—' }
 
+function extractRoundRecords(session) {
+  if (session.rounds && session.rounds.length > 1) {
+    return session.rounds.map(r => ({ contractResults: r.contract_results, contractOrder: r.contract_order }))
+  }
+  return [{ contractResults: session.contractResults, contractOrder: session.contractOrder }]
+}
+
 function AdminAnalytics({ sessions }) {
   if (sessions.length === 0) {
     return <p style={{ color: 'var(--text-muted)', textAlign: 'center', padding: '3rem 0' }}>No participant data yet.</p>
@@ -73,39 +87,69 @@ function AdminAnalytics({ sessions }) {
   const n = sessions.length
 
   // ── Time ────────────────────────────────────────────────────
-  function getTimes(id) {
-    return sessions.map(s => s.contractResults?.[id]?.timeSpent)
-      .filter(t => t !== undefined && t !== null && t !== '')
-      .map(Number).filter(n => !isNaN(n))
+  // Get all contract IDs for a round record by looking up category map
+  function getIdForCategory(roundNumber, category) {
+    const map = ROUND_CATEGORY_MAP[roundNumber] || ROUND_CATEGORY_MAP[1]
+    return Object.entries(map).find(([, cat]) => cat === category)?.[0]
   }
-  const avgTimes = Object.fromEntries(CONTRACT_IDS.map(id => [id, avg(getTimes(id))]))
+
+  function getRoundNumber(roundRecord, sessionRounds) {
+    if (sessionRounds && sessionRounds.length > 1) return roundRecord.round_number || 1
+    return 1
+  }
+
+  function getTimesByCategory(category) {
+    return sessions.flatMap(s => {
+      return extractRoundRecords(s).flatMap((r, ri) => {
+        const roundNum = s.rounds ? (s.rounds[ri]?.round_number || ri + 1) : 1
+        const id = getIdForCategory(roundNum, category)
+        return id ? [r.contractResults?.[id]?.timeSpent].filter(t => t !== undefined && t !== null && t !== '') : []
+      })
+    }).map(Number).filter(n => !isNaN(n))
+  }
+
+  function getDiffsByCategory(category) {
+    return sessions.flatMap(s => {
+      return extractRoundRecords(s).flatMap((r, ri) => {
+        const roundNum = s.rounds ? (s.rounds[ri]?.round_number || ri + 1) : 1
+        const id = getIdForCategory(roundNum, category)
+        return id ? [r.contractResults?.[id]?.answers?.difficulty].filter(v => v !== undefined && v !== null && v !== '') : []
+      })
+    }).map(Number).filter(n => !isNaN(n))
+  }
+
+  const avgTimes = Object.fromEntries(CATEGORIES.map(cat => [cat, avg(getTimesByCategory(cat))]))
   const maxAvgTime = Math.max(...Object.values(avgTimes), 1)
 
   const avgTotalTime = avg(sessions.map(s =>
-    CONTRACT_IDS.reduce((sum, id) => sum + (Number(s.contractResults?.[id]?.timeSpent) || 0), 0)
+    extractRoundRecords(s).reduce((sum, r, ri) => {
+      const roundNum = s.rounds ? (s.rounds[ri]?.round_number || ri + 1) : 1
+      return sum + CATEGORIES.reduce((s2, cat) => {
+        const id = getIdForCategory(roundNum, cat)
+        return s2 + (Number(r.contractResults?.[id]?.timeSpent) || 0)
+      }, 0)
+    }, 0)
   ))
 
-  // ── Difficulty ──────────────────────────────────────────────
-  function getDiffs(id) {
-    return sessions.map(s => s.contractResults?.[id]?.answers?.difficulty)
-      .filter(v => v !== undefined && v !== null && v !== '')
-      .map(Number).filter(n => !isNaN(n))
-  }
-  const avgDiffs = Object.fromEntries(CONTRACT_IDS.map(id => [id, Number(avgF(getDiffs(id))) || 0]))
+  const avgDiffs = Object.fromEntries(CATEGORIES.map(cat => [cat, Number(avgF(getDiffsByCategory(cat))) || 0]))
 
   // ── Timer expiry ─────────────────────────────────────────────
-  const expiry = Object.fromEntries(CONTRACT_IDS.map(id => [
-    id, sessions.filter(s => s.contractResults?.[id]?.timerExpired).length
+  const expiry = Object.fromEntries(CATEGORIES.map(cat => [
+    cat, sessions.flatMap(s => extractRoundRecords(s).map((r, ri) => {
+      const roundNum = s.rounds ? (s.rounds[ri]?.round_number || ri + 1) : 1
+      const id = getIdForCategory(roundNum, cat)
+      return id ? r.contractResults?.[id]?.timerExpired : false
+    })).filter(Boolean).length
   ]))
 
   // ── Completion ───────────────────────────────────────────────
   const fullyComplete = sessions.filter(s =>
-    s.contractOrder?.every(id => s.contractResults?.[id])
+    extractRoundRecords(s).every(r => r.contractOrder?.every(id => r.contractResults?.[id]))
   ).length
 
-  // ── Hardest contract ─────────────────────────────────────────
-  const hardest = CONTRACT_IDS
-    .filter(id => avgDiffs[id] > 0)
+  // ── Hardest category ─────────────────────────────────────────
+  const hardest = CATEGORIES
+    .filter(cat => avgDiffs[cat] > 0)
     .sort((a, b) => avgDiffs[b] - avgDiffs[a])[0]
 
   // ── Background ───────────────────────────────────────────────
@@ -142,9 +186,11 @@ function AdminAnalytics({ sessions }) {
   function getMcDist(contractId, questionId) {
     const dist = {}
     sessions.forEach(s => {
-      const result = s.contractResults?.[contractId]
-      const ans = result?.canonicalAnswers?.[questionId] ?? result?.answers?.[questionId]
-      if (ans) dist[ans] = (dist[ans] || 0) + 1
+      extractRoundRecords(s).forEach(r => {
+        const result = r.contractResults?.[contractId]
+        const ans = result?.canonicalAnswers?.[questionId] ?? result?.answers?.[questionId]
+        if (ans) dist[ans] = (dist[ans] || 0) + 1
+      })
     })
     return dist
   }
@@ -153,8 +199,10 @@ function AdminAnalytics({ sessions }) {
   // ── Presentation order analysis ───────────────────────────────
   const orderCounts = {}
   sessions.forEach(s => {
-    const key = s.contractOrder?.join('→')
-    if (key) orderCounts[key] = (orderCounts[key] || 0) + 1
+    extractRoundRecords(s).forEach(r => {
+      const key = r.contractOrder?.join('→')
+      if (key) orderCounts[key] = (orderCounts[key] || 0) + 1
+    })
   })
   const maxOrderCount = Math.max(...Object.values(orderCounts), 1)
 
@@ -192,30 +240,30 @@ function AdminAnalytics({ sessions }) {
       </Section>
 
       <TwoCol>
-        {/* ── Time per contract ── */}
-        <Section title="Avg Time per Contract">
-          {CONTRACT_IDS.map((id, i) => (
+        {/* ── Time per category ── */}
+        <Section title="Avg Time per Contract Category">
+          {CATEGORIES.map((cat, i) => (
             <HBar
-              key={id}
-              label={`Contract ${id} — ${contracts[id]?.label?.split('—')[1]?.trim() || ''}`}
-              value={avgTimes[id]}
+              key={cat}
+              label={CATEGORY_LABELS[cat]}
+              value={avgTimes[cat]}
               max={maxAvgTime}
               color={CONTRACT_COLORS[i]}
               suffix="s"
             />
           ))}
           <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '0.5rem' }}>
-            Limits: A/B = 400s, C/D = 600s
+            Aggregated across all rounds
           </p>
         </Section>
 
-        {/* ── Difficulty per contract ── */}
+        {/* ── Difficulty per category ── */}
         <Section title="Avg Difficulty Rating (1–5)">
-          {CONTRACT_IDS.map((id, i) => (
+          {CATEGORIES.map((cat, i) => (
             <HBar
-              key={id}
-              label={`Contract ${id}`}
-              value={avgDiffs[id]}
+              key={cat}
+              label={CATEGORY_LABELS[cat]}
+              value={avgDiffs[cat]}
               max={5}
               color={CONTRACT_COLORS[i]}
             />
@@ -226,16 +274,16 @@ function AdminAnalytics({ sessions }) {
       {/* ── Timer expiry ── */}
       <Section title="Timer Expiry Rate (ran out of time)">
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '0.75rem' }}>
-          {CONTRACT_IDS.map((id, i) => (
-            <div key={id} style={{
+          {CATEGORIES.map((cat, i) => (
+            <div key={cat} style={{
               background: 'var(--bg-elevated)', border: '1px solid var(--border)',
               borderRadius: '0.5rem', padding: '0.75rem 1rem', textAlign: 'center',
             }}>
-              <div style={{ fontSize: '1.5rem', fontWeight: 800, color: expiry[id] > 0 ? 'var(--danger-text)' : 'var(--success)', lineHeight: 1 }}>
-                {expiry[id]}
+              <div style={{ fontSize: '1.5rem', fontWeight: 800, color: expiry[cat] > 0 ? 'var(--danger-text)' : 'var(--success)', lineHeight: 1 }}>
+                {expiry[cat]}
               </div>
               <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)', marginTop: '0.2rem' }}>
-                Contract {id} ({Math.round(expiry[id] / n * 100)}%)
+                {CATEGORY_LABELS[cat]} ({Math.round(expiry[cat] / n * 100)}%)
               </div>
             </div>
           ))}
@@ -305,23 +353,42 @@ function AdminAnalytics({ sessions }) {
 
       {/* ── MC question answer distributions ── */}
       <Section title="Multiple Choice Answer Distributions (green = correct)">
-        {CONTRACT_IDS.map((contractId, ci) => {
-          const radioQs = contracts[contractId]?.questions?.filter(q => q.type === 'radio') || []
-          const qsWithData = radioQs.map(q => {
-            const dist = getMcDist(contractId, q.id)
+        {CATEGORIES.map((category, ci) => {
+          // Gather all MC questions across all rounds for this category
+          const allQsMap = {}
+          Object.values(ROUND_CATEGORY_MAP).forEach(map => {
+            const contractId = Object.entries(map).find(([, cat]) => cat === category)?.[0]
+            if (!contractId) return
+            const contract = ALL_CONTRACTS[contractId]
+            contract?.questions?.filter(q => q.type === 'radio').forEach(q => {
+              // Use prompt as key to deduplicate across rounds
+              if (!allQsMap[q.prompt]) allQsMap[q.prompt] = q
+            })
+          })
+          // For distribution, collect by category across all rounds
+          const qsWithData = Object.values(allQsMap).map(q => {
+            // Aggregate answers from all contract IDs that map to this category
+            const dist = {}
+            Object.entries(ROUND_CATEGORY_MAP).forEach(([, map]) => {
+              const contractId = Object.entries(map).find(([, cat]) => cat === category)?.[0]
+              if (contractId) {
+                const d = getMcDist(contractId, q.id)
+                Object.entries(d).forEach(([ans, count]) => { dist[ans] = (dist[ans] || 0) + count })
+              }
+            })
             const total = Object.values(dist).reduce((a, b) => a + b, 0)
             return { q, dist, total }
           }).filter(({ total }) => total > 0)
           if (qsWithData.length === 0) return null
           return (
-            <div key={contractId} style={{ marginBottom: '1.75rem' }}>
+            <div key={category} style={{ marginBottom: '1.75rem' }}>
               <div style={{
                 fontSize: '0.75rem', fontWeight: 700, color: CONTRACT_COLORS[ci],
                 textTransform: 'uppercase', letterSpacing: '0.05em',
                 marginBottom: '0.875rem', paddingBottom: '0.35rem',
                 borderBottom: `2px solid ${CONTRACT_COLORS[ci]}22`,
               }}>
-                Contract {contractId} — {contracts[contractId]?.label?.split('—')[1]?.trim()}
+                {CATEGORY_LABELS[category]}
               </div>
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '1.25rem' }}>
                 {qsWithData.map(({ q, dist, total }) => {
