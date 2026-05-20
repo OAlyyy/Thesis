@@ -1,9 +1,13 @@
 import { useState, useEffect } from 'react';
-import { contracts } from '../../data/contracts';
+import { contracts, contractsRound2, contractsRound3 } from '../../data/contracts';
 import { gradeOpenTextAnswers } from '../../services/aiGrading';
+const ALL_CONTRACTS = { ...contracts, ...contractsRound2, ...contractsRound3 };
 
-const SCORE_LABEL = { correct: 'Correct', partial: 'Partial', incorrect: 'Incorrect' };
-const SCORE_CLASS = { correct: 'grade-correct', partial: 'grade-partial', incorrect: 'grade-incorrect' };
+function scoreClass(score) {
+  if (score >= 0.75) return 'grade-correct'
+  if (score >= 0.4) return 'grade-partial'
+  return 'grade-incorrect'
+}
 
 function RadioResult({ question, answer }) {
   const isCorrect = answer === question.correctAnswer;
@@ -44,8 +48,8 @@ function TextResult({ question, answer, grading, contractId }) {
       </div>
       {grade ? (
         <div className="review-grade-block">
-          <span className={`review-badge ${SCORE_CLASS[grade.score]}`}>
-            {SCORE_LABEL[grade.score]}
+          <span className={`review-badge ${scoreClass(grade.score)}`}>
+            {typeof grade.score === 'number' ? `${grade.score.toFixed(1)} / 1.0` : grade.score}
           </span>
           <span className="review-ai-feedback">{grade.feedback}</span>
         </div>
@@ -68,15 +72,48 @@ function ScaleResult({ question, answer }) {
   );
 }
 
-export default function ResultsReview({ contractOrder, contractResults, onClose }) {
+export default function ResultsReview({ contractOrder, contractResults, rounds, onClose }) {
   const [grading, setGrading] = useState(null);
   const [loading, setLoading] = useState(true);
 
+  // Build a flat list of rounds to display
+  const allRounds = rounds?.length > 0
+    ? rounds
+    : [{ round_number: 1, contract_order: contractOrder, contract_results: contractResults }];
+
   useEffect(() => {
-    gradeOpenTextAnswers(contractOrder, contractResults)
+    // Grade all rounds together
+    const allOrder = allRounds.flatMap(r => r.contract_order ?? []);
+    const allResults = Object.assign({}, ...allRounds.map(r => r.contract_results ?? {}));
+    gradeOpenTextAnswers(allOrder, allResults)
       .then(result => setGrading(result))
       .finally(() => setLoading(false));
-  }, [contractOrder, contractResults]);
+  }, []);
+
+  function renderRound(roundData) {
+    return (roundData.contract_order ?? []).map((contractId) => {
+      const contract = ALL_CONTRACTS[contractId];
+      const result = (roundData.contract_results ?? {})[contractId];
+      if (!contract || !result) return null;
+
+      const answers = result.answers || {};
+      const questions = result.variedQuestions || contract.questions;
+
+      return (
+        <section key={contractId} className="review-contract-section">
+          <h3 className="review-contract-title">Contract {contractId}</h3>
+          {questions.map((q) => {
+            if (q.type === 'scale') return <ScaleResult key={q.id} question={q} answer={answers[q.id]} />;
+            if (q.type === 'radio') return <RadioResult key={q.id} question={q} answer={answers[q.id]} />;
+            if (q.type === 'text') return (
+              <TextResult key={q.id} question={q} answer={answers[q.id]} grading={grading || {}} contractId={contractId} />
+            );
+            return null;
+          })}
+        </section>
+      );
+    });
+  }
 
   return (
     <div className="review-overlay">
@@ -92,45 +129,20 @@ export default function ResultsReview({ contractOrder, contractResults, onClose 
         {loading && (
           <div className="review-loading">
             <div className="review-spinner" />
-            <p>Grading your open-text answers…</p>
+            <p>Grading open-text answers…</p>
           </div>
         )}
 
-        {!loading && contractOrder.map((contractId) => {
-          const contract = contracts[contractId];
-          const result = contractResults[contractId];
-          if (!contract || !result) return null;
-
-          const answers = result.answers || {};
-          const questions = result.variedQuestions || contract.questions;
-
-          return (
-            <section key={contractId} className="review-contract-section">
-              <h3 className="review-contract-title">{contract.label}</h3>
-
-              {questions.map((q) => {
-                if (q.type === 'scale') {
-                  return <ScaleResult key={q.id} question={q} answer={answers[q.id]} />;
-                }
-                if (q.type === 'radio') {
-                  return <RadioResult key={q.id} question={q} answer={answers[q.id]} />;
-                }
-                if (q.type === 'text') {
-                  return (
-                    <TextResult
-                      key={q.id}
-                      question={q}
-                      answer={answers[q.id]}
-                      grading={grading || {}}
-                      contractId={contractId}
-                    />
-                  );
-                }
-                return null;
-              })}
-            </section>
-          );
-        })}
+        {!loading && allRounds.map((roundData) => (
+          <div key={roundData.round_number}>
+            {allRounds.length > 1 && (
+              <h3 style={{ fontSize: '0.9rem', fontWeight: 700, color: 'var(--text-secondary)', margin: '1.5rem 0 0.5rem', borderBottom: '1px solid var(--border)', paddingBottom: '0.4rem' }}>
+                Round {roundData.round_number}
+              </h3>
+            )}
+            {renderRound(roundData)}
+          </div>
+        ))}
 
         <div className="review-footer">
           <button className="btn-primary" onClick={onClose}>Close Review</button>

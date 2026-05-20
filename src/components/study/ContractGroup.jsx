@@ -13,6 +13,16 @@ const wbReplace = (str, mapping) =>
     str
   );
 
+function shuffleQuestions(questions) {
+  const nonDifficulty = [...questions.filter(q => q.id !== 'difficulty')];
+  for (let i = nonDifficulty.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [nonDifficulty[i], nonDifficulty[j]] = [nonDifficulty[j], nonDifficulty[i]];
+  }
+  const difficulty = questions.find(q => q.id === 'difficulty');
+  return difficulty ? [...nonDifficulty, difficulty] : nonDifficulty;
+}
+
 function applyNameMapping(questions, mapping) {
   if (!mapping || Object.keys(mapping).length === 0) return questions;
   const replace = (str) => (str ? wbReplace(str, mapping) : str);
@@ -34,7 +44,7 @@ function reverseMapAnswers(answers, mapping) {
   );
 }
 
-function ContractGroup({ contract, contractIndex, onComplete, totalRounds = 1, currentRound = 1 }) {
+function ContractGroup({ contract, contractIndex, onComplete, totalRounds = 1, currentRound = 1, showAdminExit = false, onAdminExit }) {
   const [variedCode, setVariedCode] = useState(null);
   const [variedQuestions, setVariedQuestions] = useState(contract.questions);
   const [nameMapping, setNameMapping] = useState({});
@@ -73,7 +83,7 @@ function ContractGroup({ contract, contractIndex, onComplete, totalRounds = 1, c
     generateContractVariation(contract).then(({ variedCode, nameMapping: mapping }) => {
       if (!cancelled) {
         setVariedCode(variedCode);
-        setVariedQuestions(applyNameMapping(contract.questions, mapping));
+        setVariedQuestions(shuffleQuestions(applyNameMapping(contract.questions, mapping)));
         setNameMapping(mapping);
         setLoading(false);
       }
@@ -137,11 +147,30 @@ function ContractGroup({ contract, contractIndex, onComplete, totalRounds = 1, c
           {totalRounds > 1 && <span className="round-badge">Round {currentRound}/{totalRounds} &mdash; </span>}
           Contract {contractIndex + 1} of 4 &mdash; <strong>Contract {contract.id}</strong>
         </div>
-        <Timer
-          totalSeconds={contract.timerSeconds}
-          onExpire={handleTimerExpire}
-          onTick={handleTick}
-        />
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+          {showAdminExit && (
+            <button
+              onClick={onAdminExit}
+              style={{
+                fontSize: '0.75rem',
+                padding: '0.25rem 0.65rem',
+                borderRadius: '0.35rem',
+                border: '1px solid var(--border)',
+                background: 'var(--bg-surface)',
+                color: 'var(--text-muted)',
+                cursor: 'pointer',
+                fontWeight: 600,
+              }}
+            >
+              ✕ Stop Study
+            </button>
+          )}
+          <Timer
+            totalSeconds={contract.timerSeconds}
+            onExpire={handleTimerExpire}
+            onTick={handleTick}
+          />
+        </div>
       </div>
 
       {/* Split pane */}

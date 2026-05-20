@@ -10,7 +10,7 @@ function escapeField(value) {
 // All contract IDs in fixed order for consistent CSV columns across all rounds
 const ALL_CONTRACT_IDS = ['A','B','C','D','E','F','G','H','I','J','K','L']
 
-export function generateCSV(participantId, backgroundAnswers, contractOrder, contractResults, sessionSeed) {
+export function generateCSV(participantId, backgroundAnswers, contractOrder, contractResults, sessionSeed, grades) {
   const bg = backgroundAnswers || {}
 
   // Build dynamic question columns for each contract
@@ -24,11 +24,21 @@ export function generateCSV(participantId, backgroundAnswers, contractOrder, con
     return [`${prefix}_time_seconds`, `${prefix}_timer_expired`, ...questionCols, `${prefix}_difficulty`]
   })
 
+  // Score columns for open-text questions only
+  const scoreCols = ALL_CONTRACT_IDS.flatMap(id => {
+    const contract = ALL_CONTRACTS[id]
+    if (!contract) return []
+    return contract.questions
+      .filter(q => q.type === 'text')
+      .map(q => `contract_${id.toLowerCase()}_${q.id}_score`)
+  })
+
   const headers = [
     'participant_id', 'timestamp', 'session_seed', 'presentation_order',
     'years_programming', 'years_professional', 'solidity_experience',
     'proxy_experience', 'peer_experience', 'occupation', 'blockchain_familiarity',
     ...contractCols,
+    ...scoreCols,
   ]
 
   const getField = (contractId, field) => {
@@ -52,6 +62,14 @@ export function generateCSV(participantId, backgroundAnswers, contractOrder, con
     ]
   })
 
+  const scoreValues = ALL_CONTRACT_IDS.flatMap(id => {
+    const contract = ALL_CONTRACTS[id]
+    if (!contract) return []
+    return contract.questions
+      .filter(q => q.type === 'text')
+      .map(q => grades?.[`${id}_${q.id}`]?.score ?? '')
+  })
+
   const row = [
     participantId,
     new Date().toISOString(),
@@ -61,6 +79,7 @@ export function generateCSV(participantId, backgroundAnswers, contractOrder, con
     bg.solidity_experience ?? '', bg.proxy_experience ?? '',
     bg.peer_experience ?? '', bg.occupation ?? '', bg.blockchain_familiarity ?? '',
     ...contractValues,
+    ...scoreValues,
   ]
 
   return headers.map(escapeField).join(',') + '\r\n' + row.map(escapeField).join(',') + '\r\n'
@@ -102,6 +121,7 @@ export function generateJamoviCSV(sessions) {
     'experience',
     ...roundLabels.flatMap(r => CONTRACT_COLS.map(c => `time_${r}_${c}`)),
     ...roundLabels.flatMap(r => CONTRACT_COLS.map(c => `error_${r}_${c}`)),
+    ...roundLabels.flatMap(r => CONTRACT_COLS.map(c => `textscore_${r}_${c}`)),
   ]
 
   const rows = sessions.map(session => {
@@ -140,11 +160,30 @@ export function generateJamoviCSV(sessions) {
       })
     })
 
+    const textScoreValues = roundLabels.flatMap((_, ri) => {
+      const roundNumber = ri + 1
+      return CONTRACT_COLS.map(cat => {
+        const id = getCategoryId(roundNumber, cat)
+        if (!id) return ''
+        const contract = ALL_CONTRACTS[id]
+        if (!contract) return ''
+        const textQs = contract.questions.filter(q => q.type === 'text')
+        if (textQs.length === 0) return ''
+        const scores = textQs
+          .map(q => session.grades?.[`${id}_${q.id}`]?.score)
+          .filter(s => s !== undefined && s !== null && s !== '')
+          .map(Number).filter(n => !isNaN(n))
+        if (scores.length === 0) return ''
+        return (scores.reduce((a, b) => a + b, 0) / scores.length).toFixed(3)
+      })
+    })
+
     return [
       session.participantId,
       calcExperience(session.backgroundAnswers),
       ...timeValues,
       ...errorValues,
+      ...textScoreValues,
     ]
   })
 

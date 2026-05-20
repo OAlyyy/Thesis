@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { FiRefreshCw, FiChevronDown, FiLogOut, FiArrowLeft } from 'react-icons/fi'
-import { getAllSessions, deleteSession, clearAllSessions, updateSession, getAIEnabled, setAIEnabled, getStudyOpen, setStudyOpen, getNumRounds, setNumRounds } from '../../services/storage'
+import { getAllSessions, deleteSession, clearAllSessions, updateSession, getAIEnabled, setAIEnabled, getStudyOpen, setStudyOpen, getNumRounds, setNumRounds, saveGrades } from '../../services/storage'
+import { gradeAllRounds } from '../../services/aiGrading'
 import { generateCSV, downloadCSV, generateJamoviCSV } from '../../utils/csvExport'
 import { contracts, contractsRound2, contractsRound3 } from '../../data/contracts'
 const ALL_CONTRACTS = { ...contracts, ...contractsRound2, ...contractsRound3 }
@@ -11,10 +12,10 @@ import { supabase } from '../../services/supabase'
 function sessionToCSVRows(s) {
   if (s.rounds && s.rounds.length > 1) {
     return s.rounds.map(r =>
-      generateCSV(s.participantId, s.backgroundAnswers, r.contract_order, r.contract_results, r.session_seed)
+      generateCSV(s.participantId, s.backgroundAnswers, r.contract_order, r.contract_results, r.session_seed, s.grades)
     )
   }
-  return [generateCSV(s.participantId, s.backgroundAnswers, s.contractOrder, s.contractResults, s.sessionSeed)]
+  return [generateCSV(s.participantId, s.backgroundAnswers, s.contractOrder, s.contractResults, s.sessionSeed, s.grades)]
 }
 
 function exportAll(sessions) {
@@ -123,6 +124,9 @@ function AdminPanel({ onLogout }) {
   const [loading, setLoading] = useState(true)
 
   const [confirmLogout, setConfirmLogout] = useState(false)
+  const [gradingStatus, setGradingStatus] = useState('idle') // 'idle'|'loading'|'done'
+  const [localGrades, setLocalGrades] = useState(null)
+  const [gradesSaved, setGradesSaved] = useState(false)
   const exportRef = useRef(null)
 
   useEffect(() => {
@@ -240,6 +244,29 @@ function AdminPanel({ onLogout }) {
     setTimeout(() => { setEditSession(null); setEditSaved(false); refresh() }, 1000)
   }
 
+  // Load existing grades when a session is opened
+  useEffect(() => {
+    if (selectedSession) {
+      setLocalGrades(selectedSession.grades ?? null)
+      setGradingStatus(selectedSession.grades ? 'done' : 'idle')
+      setGradesSaved(false)
+    }
+  }, [selectedSession?.participantId])
+
+  async function handleGradeAll() {
+    setGradingStatus('loading')
+    const grades = await gradeAllRounds(selectedSession)
+    setLocalGrades(grades)
+    setGradingStatus('done')
+  }
+
+  async function handleSaveGrades() {
+    await saveGrades(selectedSession.participantId, localGrades)
+    setGradesSaved(true)
+    setSelectedSession({ ...selectedSession, grades: localGrades })
+    setTimeout(() => setGradesSaved(false), 2000)
+  }
+
   // --- Detail View ---
   if (selectedSession) {
     const s = selectedSession
@@ -338,6 +365,79 @@ function AdminPanel({ onLogout }) {
           ))}
         </section>
 
+        {/* Open-Text Grading */}
+        <section style={{ marginBottom: '2rem' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', marginBottom: '0.75rem', borderBottom: '1px solid var(--border)', paddingBottom: '0.5rem' }}>
+            <h3 style={{ fontSize: '1rem', fontWeight: 700, color: 'var(--text-secondary)', margin: 0 }}>Open-Text Grading</h3>
+            {gradingStatus === 'idle' && (
+              <button className="btn-secondary" style={{ fontSize: '0.8rem', padding: '0.25rem 0.65rem' }} onClick={handleGradeAll}>
+                AI Grade All
+              </button>
+            )}
+            {gradingStatus === 'loading' && <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>Grading…</span>}
+            {gradingStatus === 'done' && (
+              <>
+                <button className="btn-secondary" style={{ fontSize: '0.8rem', padding: '0.25rem 0.65rem' }} onClick={handleGradeAll}>Re-grade</button>
+                <button className="btn-primary" style={{ fontSize: '0.8rem', padding: '0.25rem 0.65rem' }} onClick={handleSaveGrades}>
+                  {gradesSaved ? 'Saved ✓' : 'Save Grades'}
+                </button>
+              </>
+            )}
+          </div>
+
+          {gradingStatus === 'idle' && !localGrades && (
+            <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>Click "AI Grade All" to automatically score open-text answers (0.0–1.0).</p>
+          )}
+
+          {localGrades && (() => {
+            const rounds = s.rounds?.length > 0
+              ? s.rounds
+              : [{ round_number: 1, contract_order: s.contractOrder, contract_results: s.contractResults }]
+            return rounds.map(rd => (
+              <div key={rd.round_number}>
+                {s.rounds?.length > 1 && (
+                  <p style={{ fontSize: '0.8rem', fontWeight: 700, color: 'var(--text-secondary)', margin: '0.75rem 0 0.4rem' }}>Round {rd.round_number}</p>
+                )}
+                {(rd.contract_order ?? []).map(cid => {
+                  const contract = ALL_CONTRACTS[cid]
+                  const result = rd.contract_results?.[cid]
+                  if (!contract || !result) return null
+                  const textQs = contract.questions.filter(q => q.type === 'text')
+                  if (textQs.length === 0) return null
+                  return (
+                    <div key={cid} style={{ marginBottom: '1rem', background: 'var(--bg-elevated)', border: '1px solid var(--border)', borderRadius: '0.5rem', padding: '0.75rem' }}>
+                      <p style={{ fontWeight: 700, fontSize: '0.85rem', color: 'var(--text-primary)', marginBottom: '0.5rem' }}>Contract {cid}</p>
+                      {textQs.map(q => {
+                        const key = `${cid}_${q.id}`
+                        const grade = localGrades[key]
+                        const answer = (result.canonicalAnswers ?? result.answers)?.[q.id]
+                        return (
+                          <div key={q.id} style={{ marginBottom: '0.75rem', paddingBottom: '0.75rem', borderBottom: '1px solid var(--border)' }}>
+                            <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginBottom: '0.3rem' }}>{q.prompt}</p>
+                            <p style={{ fontSize: '0.8rem', color: 'var(--text-primary)', marginBottom: '0.4rem', fontStyle: 'italic' }}>"{answer || '—'}"</p>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                              <label style={{ fontSize: '0.8rem', color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>Score (0–1):</label>
+                              <input
+                                type="number" min="0" max="1" step="0.1"
+                                value={grade?.score ?? ''}
+                                onChange={e => setLocalGrades(prev => ({ ...prev, [key]: { ...(prev[key] ?? {}), score: parseFloat(e.target.value) } }))}
+                                style={{ width: '70px', padding: '0.2rem 0.4rem', borderRadius: '0.3rem', border: '1px solid var(--border)', background: 'var(--bg-surface)', color: 'var(--text-primary)', fontSize: '0.85rem' }}
+                              />
+                              {grade?.feedback && (
+                                <span style={{ fontSize: '0.78rem', color: 'var(--text-muted)', fontStyle: 'italic' }}>{grade.feedback}</span>
+                              )}
+                            </div>
+                          </div>
+                        )
+                      })}
+                    </div>
+                  )
+                })}
+              </div>
+            ))
+          })()}
+        </section>
+
         <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap' }}>
           <button className="btn-secondary" onClick={() => exportSingle(s)}>
             Export CSV
@@ -357,6 +457,7 @@ function AdminPanel({ onLogout }) {
           <ResultsReview
             contractOrder={s.contractOrder}
             contractResults={s.contractResults}
+            rounds={s.rounds}
             onClose={() => setReviewSession(null)}
           />
         )}
@@ -647,6 +748,7 @@ function AdminPanel({ onLogout }) {
         <ResultsReview
           contractOrder={reviewSession.contractOrder}
           contractResults={reviewSession.contractResults}
+          rounds={reviewSession.rounds}
           onClose={() => setReviewSession(null)}
         />
       )}

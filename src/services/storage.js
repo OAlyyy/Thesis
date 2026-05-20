@@ -13,6 +13,7 @@ function toRow(session) {
     background_answers: session.backgroundAnswers,
     contract_results:   session.contractResults,
     rounds:             session.rounds ?? null,
+    grades:             session.grades ?? null,
   }
 }
 
@@ -25,6 +26,7 @@ function fromRow(row) {
     backgroundAnswers: row.background_answers,
     contractResults:   row.contract_results,
     rounds:            row.rounds ?? null,
+    grades:            row.grades ?? null,
   }
 }
 
@@ -150,6 +152,16 @@ export async function recoverLocalToSupabase() {
     ok++
   }
   return { ok, failed }
+}
+
+export async function saveGrades(participantId, grades) {
+  if (supabase) {
+    const { error } = await supabase.from('sessions').update({ grades }).eq('participant_id', participantId)
+    if (error) console.warn('saveGrades Supabase failed:', error)
+  }
+  const sessions = getLocalSessions()
+  const idx = sessions.findIndex(s => s.participantId === participantId)
+  if (idx >= 0) { sessions[idx] = { ...sessions[idx], grades }; localStorage.setItem(STORAGE_KEY, JSON.stringify(sessions)) }
 }
 
 export function getNumRounds() {

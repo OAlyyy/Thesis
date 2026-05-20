@@ -25,7 +25,7 @@ function App() {
     supabase.auth.getSession().then(({ data }) => {
       const email = data.session?.user?.email
       if (email === 'omar@admin.com') setIsOwner(true)
-      if (data.session && isAdmin) setAdminAuthed(true)
+      if (data.session) setAdminAuthed(true)
       setAuthChecked(true)
     })
   }, [isAdmin])
@@ -187,6 +187,17 @@ function App() {
         totalRounds={numRounds}
         currentRound={currentRound}
         onComplete={handleContractComplete}
+        showAdminExit={adminAuthed}
+        onAdminExit={() => {
+          localStorage.removeItem(PROGRESS_KEY)
+          setScreen('welcome')
+          setBackgroundAnswers(null)
+          setCurrentRound(1)
+          setCompletedRounds([])
+          setContractOrder(null)
+          setCurrentContractIndex(0)
+          setContractResults({})
+        }}
       />
     )
   }
