@@ -173,12 +173,6 @@ contract Proxy {
         explanation: 'delegatecall runs SimpleStorageV2\'s code inside the Proxy\'s storage context. All writes go to the Proxy\'s storage slots, not SimpleStorageV2\'s.',
       },
       {
-        id: 'q7',
-        type: 'text',
-        prompt: 'If you only had access to the Proxy contract code and not SimpleStorageV2, could you determine what getValue() returns? Explain your answer.',
-        correctAnswer: 'No. The Proxy blindly forwards calls via delegatecall without knowing the ABI of the implementation. You would need SimpleStorageV2\'s code (or ABI) to know what getValue() does or returns.',
-      },
-      {
         id: 'difficulty',
         type: 'scale',
         prompt: 'How difficult did you find this contract to understand?',
@@ -269,6 +263,19 @@ contract VotingSystem {
         type: 'text',
         prompt: "Where is each voter's voting status stored, and what type of data structure is used?",
         correctAnswer: 'Each voter\'s status is stored in the hasVoted mapping (mapping(address => bool)) in the VotingSystem contract\'s storage. It maps each voter\'s address to a boolean indicating whether they have voted.',
+      },
+      {
+        id: 'q6',
+        type: 'radio',
+        prompt: 'If closeVoting() is called, can the owner reopen voting?',
+        options: [
+          'Yes, by calling openVoting()',
+          'No, there is no function to reopen voting',
+          'Only by deploying a new contract',
+          'I am not sure',
+        ],
+        correctAnswer: 'No, there is no function to reopen voting',
+        explanation: 'closeVoting() sets votingOpen to false, but there is no corresponding openVoting() function in the contract. Once closed, voting cannot be reopened without deploying a new contract.',
       },
       {
         id: 'difficulty',
@@ -383,6 +390,14 @@ contract VotingProxy {
         type: 'text',
         prompt: 'Which contract would you need to audit to check for security vulnerabilities, VotingProxy or VotingSystemV2? Explain your reasoning.',
         correctAnswer: 'Both. VotingSystemV2 contains the voting logic executed via delegatecall — bugs there directly affect behaviour. VotingProxy controls who can upgrade and manages storage layout — a storage collision or unrestricted upgradeTo() is equally dangerous.',
+      },
+      {
+        id: 'q6',
+        type: 'radio',
+        prompt: 'If a voter calls vote(42) through VotingProxy, where is their hasVoted entry updated?',
+        options: ['In VotingSystemV2', 'In VotingProxy', 'In both contracts', 'I am not sure'],
+        correctAnswer: 'In VotingProxy',
+        explanation: 'delegatecall runs VotingSystemV2\'s code inside VotingProxy\'s storage context. All state writes, including hasVoted[msg.sender], happen in VotingProxy\'s storage.',
       },
       {
         id: 'difficulty',
@@ -585,12 +600,6 @@ contract BalanceProxy {
         explanation: 'delegatecall runs TokenBalanceV2\'s code inside BalanceProxy\'s storage context. All writes, including the balance update, happen in BalanceProxy\'s storage.',
       },
       {
-        id: 'q7',
-        type: 'text',
-        prompt: 'If you only had access to BalanceProxy\'s code, could you determine what deposit() does? Explain.',
-        correctAnswer: 'No. BalanceProxy blindly forwards calls via delegatecall without knowing the ABI or logic of the implementation. You would need TokenBalanceV2\'s code to understand what deposit() actually does.',
-      },
-      {
         id: 'difficulty',
         type: 'scale',
         prompt: 'How difficult did you find this contract to understand?',
@@ -699,6 +708,14 @@ contract EscrowSystem {
         type: 'text',
         prompt: 'Where is the deposited ether stored, and who controls when it moves?',
         correctAnswer: 'The ether is stored in the EscrowSystem contract\'s own balance (via msg.value in deposit()). It can only move when the depositor calls confirmDelivery() (to the beneficiary) or when the arbiter calls refundBuyer() (back to the depositor).',
+      },
+      {
+        id: 'q6',
+        type: 'radio',
+        prompt: 'Who is allowed to call confirmDelivery()?',
+        options: ['Only the arbiter', 'Only the depositor', 'Anyone', 'I am not sure'],
+        correctAnswer: 'Only the depositor',
+        explanation: 'confirmDelivery() has require(msg.sender == depositor, "Not depositor"). Only the depositor can confirm delivery and trigger the fund release to the beneficiary.',
       },
       {
         id: 'difficulty',
@@ -1185,6 +1202,19 @@ contract AuctionSystem {
         type: 'text',
         prompt: 'Where are the outbid amounts tracked, and how does a losing bidder recover their funds?',
         correctAnswer: 'Outbid amounts are tracked in the bids mapping (mapping(address => uint256)). When a bidder is outbid, their previous bid amount is credited to bids[theirAddress]. They must then call withdrawBid() to transfer that amount back to their address.',
+      },
+      {
+        id: 'q6',
+        type: 'radio',
+        prompt: 'Where does the highest bidder\'s ETH go when endAuction() is called?',
+        options: [
+          'It is returned to the highest bidder',
+          'It is sent to the seller',
+          'It stays in the contract',
+          'I am not sure',
+        ],
+        correctAnswer: 'It is sent to the seller',
+        explanation: 'endAuction() calls payable(seller).transfer(highestBid), sending the winning bid amount directly to the seller\'s address.',
       },
       {
         id: 'difficulty',
