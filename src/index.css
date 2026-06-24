@@ -89,51 +89,6 @@
   --radius-pill: 2rem;
 }
 
-/* ============================================================
-   Dark Mode Overrides
-   ============================================================ */
-[data-theme="dark"] {
-  --bg-base: #0F172A;
-  --bg-surface: #1E293B;
-  --bg-elevated: #334155;
-  --bg-hover: #334155;
-
-  --border: #334155;
-  --border-strong: #475569;
-
-  --text-primary: #F1F5F9;
-  --text-secondary: #CBD5E1;
-  --text-muted: #64748B;
-  --text-inverse: #0F172A;
-
-  --primary: #60A5FA;
-  --primary-hover: #93C5FD;
-  --primary-light: #0C1F3A;
-  --primary-text: #93C5FD;
-  --primary-border: #1E3A5F;
-
-  --danger: #F87171;
-  --danger-hover: #FCA5A5;
-  --danger-light: #450A0A;
-  --danger-border: #7F1D1D;
-  --danger-text: #F87171;
-
-  --success: #4ADE80;
-  --success-light: #052E16;
-  --success-text: #4ADE80;
-
-  --warning-light: #431407;
-  --warning-border: #7C2D12;
-  --warning-text: #FB923C;
-
-  --info-light: #0C1A2E;
-  --info-border: #1E3A5F;
-  --info-text: #7DD3FC;
-
-  --shadow-sm: 0 1px 2px rgba(0,0,0,0.3);
-  --shadow-md: 0 1px 3px rgba(0,0,0,0.4), 0 4px 16px rgba(0,0,0,0.3);
-  --shadow-lg: 0 4px 6px rgba(0,0,0,0.3), 0 10px 30px rgba(0,0,0,0.4);
-}
 
 /* ============================================================
    Base Reset & Typography

@@ -1,6 +1,6 @@
-import { FiSun, FiMoon, FiClock, FiLock, FiFileText } from 'react-icons/fi'
+import { FiClock, FiLock, FiFileText } from 'react-icons/fi'
 
-function WelcomeScreen({ onStart, theme, onToggleTheme, showThemeToggle }) {
+function WelcomeScreen({ onStart }) {
   return (
     <div className="screen-container">
       <nav className="navbar">
@@ -10,11 +10,6 @@ function WelcomeScreen({ onStart, theme, onToggleTheme, showThemeToggle }) {
           className="navbar-logo"
         />
         <div className="navbar-actions">
-          {showThemeToggle && (
-            <button className="top-bar-btn" onClick={onToggleTheme} title="Toggle dark/light mode">
-              {theme === 'dark' ? <><FiSun /> Light</> : <><FiMoon /> Dark</>}
-            </button>
-          )}
           <a href="#admin" className="top-bar-btn">Admin</a>
         </div>
       </nav>

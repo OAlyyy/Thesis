@@ -9,6 +9,11 @@ const CATEGORY_LABELS = {
   large_noproxy:  'Large / No Proxy',
   large_proxy:    'Large / Proxy',
 }
+const CONTRACT_CATEGORY = Object.fromEntries(
+  Object.values(ROUND_CATEGORY_MAP).flatMap(map =>
+    Object.entries(map).map(([id, cat]) => [id, cat])
+  )
+)
 
 function StatCard({ label, value, sub, color }) {
   return (
@@ -206,6 +211,71 @@ function AdminAnalytics({ sessions }) {
   })
   const maxOrderCount = Math.max(...Object.values(orderCounts), 1)
 
+  // ── MC accuracy per category ──────────────────────────────────
+  function getMcAccuracyByCategory(category) {
+    const scores = []
+    sessions.forEach(s => {
+      extractRoundRecords(s).forEach((r, ri) => {
+        const roundNum = s.rounds ? (s.rounds[ri]?.round_number || ri + 1) : 1
+        const id = getIdForCategory(roundNum, category)
+        if (!id) return
+        const contract = ALL_CONTRACTS[id]
+        const result = r.contractResults?.[id]
+        if (!result || !contract) return
+        contract.questions.filter(q => q.type === 'radio').forEach(q => {
+          const ans = result.canonicalAnswers?.[q.id] ?? result.answers?.[q.id]
+          if (ans !== undefined && ans !== null && ans !== '') {
+            scores.push(ans === q.correctAnswer ? 1 : 0)
+          }
+        })
+      })
+    })
+    return scores.length ? Math.round(scores.reduce((a, b) => a + b, 0) / scores.length * 100) : 0
+  }
+  const mcAccuracy = Object.fromEntries(CATEGORIES.map(cat => [cat, getMcAccuracyByCategory(cat)]))
+
+  // ── AI grades per category ────────────────────────────────────
+  function getAiScoresByCategory(category) {
+    const scores = []
+    sessions.forEach(s => {
+      if (!s.grades) return
+      Object.entries(s.grades).forEach(([key, grade]) => {
+        const contractId = key.split('_')[0]
+        if (CONTRACT_CATEGORY[contractId] === category && typeof grade.score === 'number') {
+          scores.push(grade.score)
+        }
+      })
+    })
+    return scores
+  }
+  const aiScores = Object.fromEntries(CATEGORIES.map(cat => [cat, Number(avgF(getAiScoresByCategory(cat))) || 0]))
+  const hasAiGrades = sessions.some(s => s.grades && Object.keys(s.grades).length > 0)
+  const gradedCount = sessions.filter(s => s.grades && Object.keys(s.grades).length > 0).length
+
+  // ── Multi-round learning trend ────────────────────────────────
+  const multiRoundSessions = sessions.filter(s => s.rounds && s.rounds.length > 1)
+  const roundTrend = {}
+  multiRoundSessions.forEach(s => {
+    s.rounds.forEach(r => {
+      const roundNum = r.round_number || 1
+      const scores = []
+      ;(r.contract_order || []).forEach(contractId => {
+        const contract = ALL_CONTRACTS[contractId]
+        const result = r.contract_results?.[contractId]
+        if (!result || !contract) return
+        contract.questions.filter(q => q.type === 'radio').forEach(q => {
+          const ans = result.canonicalAnswers?.[q.id] ?? result.answers?.[q.id]
+          if (ans !== undefined && ans !== '') scores.push(ans === q.correctAnswer ? 1 : 0)
+        })
+      })
+      if (scores.length > 0) {
+        if (!roundTrend[roundNum]) roundTrend[roundNum] = []
+        roundTrend[roundNum].push(Math.round(scores.reduce((a, b) => a + b, 0) / scores.length * 100))
+      }
+    })
+  })
+  const roundNums = Object.keys(roundTrend).map(Number).sort()
+
   return (
     <div>
       {/* ── Overview cards ── */}
@@ -291,6 +361,34 @@ function AdminAnalytics({ sessions }) {
       </Section>
 
       <TwoCol>
+        {/* ── MC accuracy ── */}
+        <Section title="MC Correct Answer Rate (%)">
+          {CATEGORIES.map((cat, i) => (
+            <HBar key={cat} label={CATEGORY_LABELS[cat]} value={mcAccuracy[cat]} max={100} color={CONTRACT_COLORS[i]} suffix="%" />
+          ))}
+          <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '0.5rem' }}>
+            % of MC answers that matched the correct answer
+          </p>
+        </Section>
+
+        {/* ── AI grades ── */}
+        <Section title={hasAiGrades ? `AI Open-Text Score — ${gradedCount}/${n} graded` : 'AI Open-Text Score'}>
+          {hasAiGrades ? (
+            <>
+              {CATEGORIES.map((cat, i) => (
+                <HBar key={cat} label={CATEGORY_LABELS[cat]} value={aiScores[cat]} max={1} color={CONTRACT_COLORS[i]} />
+              ))}
+              <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '0.5rem' }}>
+                Avg AI score 0.0–1.0 across open-text answers
+              </p>
+            </>
+          ) : (
+            <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>No AI grades recorded yet.</p>
+          )}
+        </Section>
+      </TwoCol>
+
+      <TwoCol>
         {/* ── Solidity experience ── */}
         <Section title={`Solidity Experience (avg ${avgSolidity}/5)`}>
           {[1, 2, 3, 4, 5].map(v => (
@@ -350,6 +448,26 @@ function AdminAnalytics({ sessions }) {
             <HBar key={order} label={order} value={count} max={maxOrderCount} color="#8B5CF6" total={n} />
           ))}
       </Section>
+
+      {/* ── Multi-round learning trend ── */}
+      {multiRoundSessions.length > 0 && (
+        <Section title={`Multi-Round Learning Trend — MC Accuracy (${multiRoundSessions.length} participants)`}>
+          <p style={{ fontSize: '0.78rem', color: 'var(--text-muted)', marginBottom: '0.75rem' }}>
+            Avg correct answer rate per round — higher later rounds suggest comprehension improvement.
+          </p>
+          {roundNums.map(rn => (
+            <HBar
+              key={rn}
+              label={`Round ${rn}`}
+              value={avg(roundTrend[rn])}
+              max={100}
+              color={CONTRACT_COLORS[(rn - 1) % CONTRACT_COLORS.length]}
+              suffix="%"
+              total={multiRoundSessions.length}
+            />
+          ))}
+        </Section>
+      )}
 
       {/* ── MC question answer distributions ── */}
       <Section title="Multiple Choice Answer Distributions (green = correct)">

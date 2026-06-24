@@ -122,6 +122,8 @@ function AdminPanel({ onLogout }) {
   const [tab, setTab] = useState('participants')
   const [exportOpen, setExportOpen] = useState(false)
   const [loading, setLoading] = useState(true)
+  const [sortCol, setSortCol] = useState('timestamp')
+  const [sortDir, setSortDir] = useState('desc')
 
   const [confirmLogout, setConfirmLogout] = useState(false)
   const [gradingStatus, setGradingStatus] = useState('idle') // 'idle'|'loading'|'done'
@@ -465,6 +467,41 @@ function AdminPanel({ onLogout }) {
     )
   }
 
+  // --- Sort helpers ---
+  function handleSort(col) {
+    if (sortCol === col) setSortDir(d => d === 'asc' ? 'desc' : 'asc')
+    else { setSortCol(col); setSortDir('asc') }
+  }
+
+  function getSortVal(s, col) {
+    switch (col) {
+      case 'id':        return s.participantId ?? ''
+      case 'timestamp': return s.timestamp ? new Date(s.timestamp).getTime() : 0
+      case 'rounds':    return s.rounds?.length ?? 1
+      case 'A': case 'B': case 'C': case 'D':
+        return Number(s.contractResults?.[col]?.timeSpent ?? Infinity)
+      default: return 0
+    }
+  }
+
+  const sortedSessions = [...sessions].sort((a, b) => {
+    const va = getSortVal(a, sortCol), vb = getSortVal(b, sortCol)
+    const cmp = typeof va === 'string' ? va.localeCompare(vb) : va - vb
+    return sortDir === 'asc' ? cmp : -cmp
+  })
+
+  const SortTh = ({ col, children }) => {
+    const active = sortCol === col
+    return (
+      <th onClick={() => handleSort(col)} style={{ cursor: 'pointer', userSelect: 'none', whiteSpace: 'nowrap' }}>
+        {children}
+        <span style={{ marginLeft: '0.3rem', opacity: active ? 1 : 0.3, fontSize: '0.65rem' }}>
+          {active ? (sortDir === 'asc' ? '▲' : '▼') : '▲'}
+        </span>
+      </th>
+    )
+  }
+
   // --- List View ---
   return (
     <div className="admin-panel">
@@ -637,20 +674,20 @@ function AdminPanel({ onLogout }) {
         <table className="admin-table">
           <thead>
             <tr>
-              <th>#</th>
-              <th>Participant ID</th>
-              <th>Timestamp</th>
-              <th>Rounds</th>
-              <th>Order (R1)</th>
-              <th>A time</th>
-              <th>B time</th>
-              <th>C time</th>
-              <th>D time</th>
+              <th style={{ width: '36px' }}>#</th>
+              <SortTh col="id">Participant ID</SortTh>
+              <SortTh col="timestamp">Submitted</SortTh>
+              <SortTh col="rounds">Rounds</SortTh>
+              <th>R1 Order</th>
+              <SortTh col="A">A (s)</SortTh>
+              <SortTh col="B">B (s)</SortTh>
+              <SortTh col="C">C (s)</SortTh>
+              <SortTh col="D">D (s)</SortTh>
               <th>Actions</th>
             </tr>
           </thead>
           <tbody>
-            {sessions.map((s, idx) => {
+            {sortedSessions.map((s, idx) => {
               const getTime = (id) => {
                 const r = s.contractResults && s.contractResults[id]
                 if (!r) return '—'
@@ -676,22 +713,18 @@ function AdminPanel({ onLogout }) {
                   <td>{getTime('C')}</td>
                   <td>{getTime('D')}</td>
                   <td>
-                    <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
-                      <button className="btn-secondary" onClick={() => setSelectedSession(s)}>
-                        View
-                      </button>
-                      <button className="btn-secondary" onClick={() => setReviewSession(s)}>
-                        Review
-                      </button>
-                      <button className="btn-secondary" onClick={() => openEdit(s)}>
-                        Edit
-                      </button>
-                      <button
-                        className="btn-danger"
-                        onClick={() => setDeleteConfirm(s.participantId)}
-                      >
-                        Delete
-                      </button>
+                    <div style={{ display: 'flex', gap: '0.35rem', flexWrap: 'nowrap' }}>
+                      {[
+                        { label: 'View',    cls: 'btn-secondary', fn: () => setSelectedSession(s) },
+                        { label: 'Review',  cls: 'btn-secondary', fn: () => setReviewSession(s) },
+                        { label: 'Edit',    cls: 'btn-secondary', fn: () => openEdit(s) },
+                        { label: 'Delete',  cls: 'btn-danger',    fn: () => setDeleteConfirm(s.participantId) },
+                      ].map(({ label, cls, fn }) => (
+                        <button key={label} className={cls} onClick={fn}
+                          style={{ fontSize: '0.75rem', padding: '0.2rem 0.5rem', whiteSpace: 'nowrap' }}>
+                          {label}
+                        </button>
+                      ))}
                     </div>
                   </td>
                 </tr>

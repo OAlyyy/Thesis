@@ -16,15 +16,11 @@ import './App.css'
 function App() {
   const [isAdmin, setIsAdmin] = useState(() => window.location.hash === '#admin')
   const [adminAuthed, setAdminAuthed] = useState(false)
-  const [isOwner, setIsOwner] = useState(false)
   const [authChecked, setAuthChecked] = useState(false)
-  const [theme, setTheme] = useState(() => localStorage.getItem('proxyscope_theme') || 'light')
 
   useEffect(() => {
     if (!supabase) { setAuthChecked(true); return }
     supabase.auth.getSession().then(({ data }) => {
-      const email = data.session?.user?.email
-      if (email === 'omar@admin.com') setIsOwner(true)
       if (data.session) setAdminAuthed(true)
       setAuthChecked(true)
     })
@@ -35,13 +31,6 @@ function App() {
     window.addEventListener('hashchange', handleHash)
     return () => window.removeEventListener('hashchange', handleHash)
   }, [])
-
-  useEffect(() => {
-    document.documentElement.setAttribute('data-theme', theme)
-    localStorage.setItem('proxyscope_theme', theme)
-  }, [theme])
-
-  const toggleTheme = () => setTheme(t => t === 'light' ? 'dark' : 'light')
 
   // ── Resume support ────────────────────────────────────────────
   const PROGRESS_KEY = 'proxyscope_progress'
@@ -167,7 +156,7 @@ function App() {
     </div>
   )
 
-  if (screen === 'welcome') return <WelcomeScreen onStart={handleStart} theme={theme} onToggleTheme={toggleTheme} showThemeToggle={authChecked && isOwner} />
+  if (screen === 'welcome') return <WelcomeScreen onStart={handleStart} />
   if (screen === 'questionnaire') return <BackgroundQuestionnaire onComplete={handleQuestionnaireComplete} />
   if (screen === 'roundcomplete') return (
     <RoundCompleteScreen
