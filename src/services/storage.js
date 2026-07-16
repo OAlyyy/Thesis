@@ -164,6 +164,13 @@ export async function saveGrades(participantId, grades) {
   if (idx >= 0) { sessions[idx] = { ...sessions[idx], grades }; localStorage.setItem(STORAGE_KEY, JSON.stringify(sessions)) }
 }
 
+export function getCodeTheme() {
+  return localStorage.getItem('proxyscope_code_theme') === 'light' ? 'light' : 'dark'
+}
+export function setCodeTheme(val) {
+  localStorage.setItem('proxyscope_code_theme', val === 'light' ? 'light' : 'dark')
+}
+
 export function getNumRounds() {
   return localStorage.getItem('proxyscope_num_rounds') === '3' ? 3 : 1
 }

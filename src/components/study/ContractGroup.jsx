@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import SyntaxHighlighter from 'react-syntax-highlighter';
-import { vs2015 } from 'react-syntax-highlighter/dist/esm/styles/hljs';
+import { vs2015, vs } from 'react-syntax-highlighter/dist/esm/styles/hljs';
+import { getCodeTheme } from '../../services/storage';
 import Timer from '../ui/Timer';
 import QuestionRenderer from '../ui/QuestionRenderer';
 import { generateContractVariation } from '../../services/aiVariation';
@@ -179,7 +180,7 @@ function ContractGroup({ contract, contractIndex, onComplete, totalRounds = 1, c
         <div className="split-left" style={{ width: `${splitPct}%` }}>
           <SyntaxHighlighter
             language="solidity"
-            style={vs2015}
+            style={getCodeTheme() === 'light' ? vs : vs2015}
             showLineNumbers={true}
             customStyle={{
               borderRadius: '0',

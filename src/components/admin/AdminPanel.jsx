@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { FiRefreshCw, FiChevronDown, FiLogOut, FiArrowLeft } from 'react-icons/fi'
-import { getAllSessions, deleteSession, clearAllSessions, updateSession, getAIEnabled, setAIEnabled, getStudyOpen, setStudyOpen, getNumRounds, setNumRounds, saveGrades } from '../../services/storage'
+import { getAllSessions, deleteSession, clearAllSessions, updateSession, getAIEnabled, setAIEnabled, getStudyOpen, setStudyOpen, getNumRounds, setNumRounds, saveGrades, getCodeTheme, setCodeTheme } from '../../services/storage'
 import { gradeAllRounds } from '../../services/aiGrading'
 import { generateCSV, downloadCSV, generateJamoviCSV } from '../../utils/csvExport'
 import { contracts, contractsRound2, contractsRound3 } from '../../data/contracts'
@@ -119,6 +119,7 @@ function AdminPanel({ onLogout }) {
   const [aiEnabled, setAIEnabledState] = useState(() => getAIEnabled())
   const [studyOpen, setStudyOpenState] = useState(() => getStudyOpen())
   const [numRoundsState, setNumRoundsState] = useState(() => getNumRounds())
+  const [codeDarkTheme, setCodeDarkThemeState] = useState(() => getCodeTheme() === 'dark')
   const [tab, setTab] = useState('participants')
   const [exportOpen, setExportOpen] = useState(false)
   const [loading, setLoading] = useState(true)
@@ -148,6 +149,11 @@ function AdminPanel({ onLogout }) {
   function handleStudyToggle(val) {
     setStudyOpen(val)
     setStudyOpenState(val)
+  }
+
+  function handleCodeThemeToggle(val) {
+    setCodeTheme(val ? 'dark' : 'light')
+    setCodeDarkThemeState(val)
   }
 
   function handleNumRoundsToggle(val) {
@@ -593,6 +599,7 @@ function AdminPanel({ onLogout }) {
         <TogglePill label="Study" enabled={studyOpen} onChange={handleStudyToggle} />
         <TogglePill label="AI Generation" enabled={aiEnabled} onChange={handleAIToggle} />
         <TogglePill label="Multi-Round Study (3×)" enabled={numRoundsState === 3} onChange={handleNumRoundsToggle} />
+        <TogglePill label="Dark Code Theme" enabled={codeDarkTheme} onChange={handleCodeThemeToggle} />
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.8rem' }}>
           <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: apiKeyConfigured ? 'var(--success)' : 'var(--danger)', display: 'inline-block' }} />
           <span style={{ color: apiKeyConfigured ? 'var(--success-text)' : 'var(--danger-text)', fontWeight: 600 }}>
